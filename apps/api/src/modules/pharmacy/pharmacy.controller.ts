@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpException, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { Prisma } from "@prisma/client";
+import type { Prisma as PrismaTypes } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/library";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TenantGuard } from "../../shared/tenant.guard";
 import { PermissionsGuard } from "../../shared/permissions.guard";
@@ -21,34 +22,36 @@ import { LotTraceQueryDto, ReportsRangeQueryDto } from "../shop/dto/reports.dto"
 import { ReportExportLogDto } from "../shop/dto/reports-export.dto";
 import { CashSessionCashDto, CloseCashSessionDto, ListCashSessionsQueryDto, OpenCashSessionDto } from "../shop/dto/cash-sessions.dto";
 
+const Prisma = { Decimal };
+
 function toInt(raw: string | undefined, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(1, Math.floor(n));
 }
 
-function toDecimalOrZero(raw: string | undefined | null): Prisma.Decimal {
-  if (!raw) return new Prisma.Decimal(0);
+function toDecimalOrZero(raw: string | undefined | null): Decimal {
+  if (!raw) return new Decimal(0);
   try {
-    const d = new Prisma.Decimal(raw);
-    if (!d.isFinite()) return new Prisma.Decimal(0);
+    const d = new Decimal(raw);
+    if (!d.isFinite()) return new Decimal(0);
     return d;
   } catch {
-    return new Prisma.Decimal(0);
+    return new Decimal(0);
   }
 }
 
-function clampDecimal(value: Prisma.Decimal, min: Prisma.Decimal, max: Prisma.Decimal): Prisma.Decimal {
+function clampDecimal(value: Decimal, min: Decimal, max: Decimal): Decimal {
   if (value.lt(min)) return min;
   if (value.gt(max)) return max;
   return value;
 }
 
-function roundToIncrement(amount: Prisma.Decimal, increment: Prisma.Decimal): Prisma.Decimal {
+function roundToIncrement(amount: Decimal, increment: Decimal): Decimal {
   if (increment.lte(0)) return amount;
   const q = amount.div(increment);
-  const rq = q.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
-  return rq.mul(increment).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+  const rq = q.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  return rq.mul(increment).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 }
 
 function formatInvoiceNumber(n: number): string {
@@ -140,8 +143,8 @@ function defaultUnits(): { name: string; symbol: string }[] {
   ];
 }
 
-function toDecimal(value: string): Prisma.Decimal {
-  return new Prisma.Decimal(value);
+function toDecimal(value: string): Decimal {
+  return new Decimal(value);
 }
 
 @Controller("pharmacy")
@@ -316,7 +319,7 @@ export class PharmacyController {
       take: 200
     });
 
-    const stockMap = new Map<string, Prisma.Decimal>();
+    const stockMap = new Map<string, Decimal>();
     if (effectiveLocationId) {
       const stock = await this.prisma.shopStockItem.findMany({
         where: { tenantId, locationId: effectiveLocationId, location: { is: { moduleId: "pharmacy" } }, product: { is: { moduleId: "pharmacy" } } },
@@ -349,7 +352,7 @@ export class PharmacyController {
     const product = await this.prisma.shopProduct.findFirst({ where: { id: body.productId, tenantId, moduleId: "pharmacy", deletedAt: null }, select: { id: true, costPrice: true } });
     if (!product) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const profile = await tx.shopProductPharmacyProfile.findFirst({ where: { tenantId, productId: body.productId }, select: { trackLots: true } });
       const trackLots = profile ? profile.trackLots : true;
       if (trackLots) {
@@ -405,7 +408,7 @@ export class PharmacyController {
     const product = await this.prisma.shopProduct.findFirst({ where: { id: body.productId, tenantId, moduleId: "pharmacy", deletedAt: null }, select: { id: true, costPrice: true } });
     if (!product) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const profile = await tx.shopProductPharmacyProfile.findFirst({ where: { tenantId, productId: body.productId }, select: { trackLots: true } });
       const trackLots = profile ? profile.trackLots : true;
 
@@ -503,7 +506,7 @@ export class PharmacyController {
     const product = await this.prisma.shopProduct.findFirst({ where: { id: body.productId, tenantId, moduleId: "pharmacy", deletedAt: null }, select: { id: true, costPrice: true } });
     if (!product) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const profile = await tx.shopProductPharmacyProfile.findFirst({ where: { tenantId, productId: body.productId }, select: { trackLots: true } });
       const trackLots = profile ? profile.trackLots : true;
 
@@ -1042,7 +1045,7 @@ export class PharmacyController {
       })
     ]);
 
-    const revenueByProduct = new Map<string, Prisma.Decimal>();
+    const revenueByProduct = new Map<string, Decimal>();
     for (const l of lines) {
       const sign = l.invoice.kind === "refund" ? -1 : 1;
       const prev = revenueByProduct.get(l.productId) ?? new Prisma.Decimal(0);
@@ -1054,7 +1057,7 @@ export class PharmacyController {
       ? await this.prisma.shopPurchaseLotReceipt.findMany({ where: { tenantId, lotId: { in: lotIds } }, select: { lotId: true, quantity: true, unitCost: true } })
       : [];
 
-    const lotCost = new Map<string, { qty: Prisma.Decimal; cost: Prisma.Decimal }>();
+    const lotCost = new Map<string, { qty: Decimal; cost: Decimal }>();
     for (const r of receipts) {
       const prev = lotCost.get(r.lotId) ?? { qty: new Prisma.Decimal(0), cost: new Prisma.Decimal(0) };
       lotCost.set(r.lotId, { qty: prev.qty.add(r.quantity), cost: prev.cost.add(r.quantity.mul(r.unitCost)) });
@@ -1070,7 +1073,7 @@ export class PharmacyController {
       : [];
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const cogsByProduct = new Map<string, Prisma.Decimal>();
+    const cogsByProduct = new Map<string, Decimal>();
     let missingCostCount = 0;
     for (const a of allocations) {
       const pid = a.lot.productId;
@@ -1594,7 +1597,7 @@ export class PharmacyController {
     if (countedCash.lt(0)) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
     const note = body.note?.trim() || null;
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const session = await tx.shopCashSession.findFirst({
         where: { tenantId, id, moduleId: "pharmacy" },
         select: { id: true, status: true, openingCash: true }
@@ -1904,7 +1907,7 @@ export class PharmacyController {
       })
     ]);
 
-    type LedgerItem = { time: Date; type: "purchase" | "refund" | "payment_out" | "payment_in"; ref: string; method: string | null; debit: Prisma.Decimal; credit: Prisma.Decimal };
+    type LedgerItem = { time: Date; type: "purchase" | "refund" | "payment_out" | "payment_in"; ref: string; method: string | null; debit: Decimal; credit: Decimal };
     const items: LedgerItem[] = [];
     for (const p of purchases) {
       items.push({
@@ -2144,7 +2147,7 @@ export class PharmacyController {
 
     const nextLines = body.lines;
     if (nextLines) {
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
         const inv = await tx.shopPurchaseInvoice.findFirst({ where: { tenantId, id, moduleId: "pharmacy" }, select: { id: true, kind: true, status: true, refundOfId: true, locationId: true } });
         if (!inv) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
         if (inv.status !== "draft") throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
@@ -2192,7 +2195,7 @@ export class PharmacyController {
     const tenantId = req.tenantId;
     if (!body.lines?.length) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const invoice = await tx.shopPurchaseInvoice.findFirst({
         where: { tenantId, id, moduleId: "pharmacy" },
         select: { id: true, moduleId: true, kind: true, status: true, locationId: true, purchaseNumber: true }
@@ -2306,7 +2309,7 @@ export class PharmacyController {
   async postPurchase(@Req() req: { tenantId: string; user: { id: string } }, @Param("id") id: string) {
     const tenantId = req.tenantId;
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const invoice = await tx.shopPurchaseInvoice.findFirst({
         where: { tenantId, id, moduleId: "pharmacy" },
         select: { id: true, kind: true, status: true, purchaseNumber: true, refundOfId: true, locationId: true }
@@ -2361,14 +2364,14 @@ export class PharmacyController {
         where: { tenantId, invoiceId: invoice.refundOfId },
         select: { productId: true, quantity: true }
       });
-      const purchasedQtyByProduct = new Map<string, Prisma.Decimal>();
+      const purchasedQtyByProduct = new Map<string, Decimal>();
       for (const l of purchasedLines) purchasedQtyByProduct.set(l.productId, (purchasedQtyByProduct.get(l.productId) ?? new Prisma.Decimal(0)).add(l.quantity));
 
       const refundedLines = await tx.shopPurchaseInvoiceLine.findMany({
         where: { tenantId, invoice: { is: { refundOfId: invoice.refundOfId, kind: "refund", status: "posted", moduleId: "pharmacy" } } },
         select: { productId: true, quantity: true }
       });
-      const refundedQtyByProduct = new Map<string, Prisma.Decimal>();
+      const refundedQtyByProduct = new Map<string, Decimal>();
       for (const l of refundedLines) refundedQtyByProduct.set(l.productId, (refundedQtyByProduct.get(l.productId) ?? new Prisma.Decimal(0)).add(l.quantity));
 
       const day0 = new Date();
@@ -2460,7 +2463,7 @@ export class PharmacyController {
     if (!method || amount.lte(0)) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
     const note = body.note?.trim() || null;
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const invoice = await tx.shopPurchaseInvoice.findFirst({
         where: { tenantId, id, moduleId: "pharmacy" },
         select: { id: true, kind: true, status: true, locationId: true, subtotal: true, paidTotal: true }
@@ -2500,7 +2503,7 @@ export class PharmacyController {
   @RequirePermissions("shop.purchases.void")
   async voidPurchase(@Req() req: { tenantId: string; user: { id: string } }, @Param("id") id: string) {
     const tenantId = req.tenantId;
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const inv = await tx.shopPurchaseInvoice.findFirst({
         where: { tenantId, id, moduleId: "pharmacy" },
         select: { id: true, kind: true, status: true, refundOfId: true, locationId: true }
@@ -2525,7 +2528,7 @@ export class PharmacyController {
 
         const lines = await tx.shopPurchaseInvoiceLine.findMany({ where: { tenantId, invoiceId: id }, select: { productId: true, quantity: true } });
         const receipts = await tx.shopPurchaseLotReceipt.findMany({ where: { tenantId, purchaseInvoiceId: id }, select: { lotId: true, quantity: true } });
-        const qtyByLotId = new Map<string, Prisma.Decimal>();
+        const qtyByLotId = new Map<string, Decimal>();
         for (const r of receipts) qtyByLotId.set(r.lotId, (qtyByLotId.get(r.lotId) ?? new Prisma.Decimal(0)).add(r.quantity));
 
         for (const [lotId, qty] of qtyByLotId.entries()) {
@@ -3006,7 +3009,7 @@ export class PharmacyController {
       if (!ok) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
     }
 
-    const product = await this.prisma.$transaction(async (tx) => {
+    const product = await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const created = await tx.shopProduct.create({
         data: {
           tenantId: req.tenantId,
@@ -3118,7 +3121,7 @@ export class PharmacyController {
 
     const barcodes = body.barcodes ? normalizeBarcodes(body.barcodes) : null;
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       await tx.shopProduct.update({ where: { id }, data: updates });
       if (barcodes) {
         await tx.shopProductBarcode.deleteMany({ where: { tenantId: req.tenantId, productId: id } });
@@ -3145,7 +3148,7 @@ export class PharmacyController {
     if (!existing) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
     if (existing.deletedAt) return { data: { success: true } };
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       await tx.shopProduct.update({ where: { id }, data: { deletedAt: new Date(), isActive: false } });
       await tx.auditLog.create({
         data: { tenantId: req.tenantId, actorUserId: req.user.id, action: "pharmacy.product.archive", entityType: "shopProduct", entityId: id, metadataJson: {} }
@@ -3229,7 +3232,7 @@ export class PharmacyController {
       attrs = Object.keys(obj).length ? obj : null;
     }
 
-    const created = await this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const product = await tx.shopProduct.create({
         data: {
           tenantId,
@@ -3470,7 +3473,7 @@ export class PharmacyController {
     const refundedMap = new Map(refunded.map((r) => [r.productId, r._sum.quantity ?? new Prisma.Decimal(0)]));
 
     const originalMap = new Map(original.lines.map((l) => [l.productId, l]));
-    const availableMap = new Map<string, Prisma.Decimal>();
+    const availableMap = new Map<string, Decimal>();
     for (const l of original.lines) {
       const refundedQty = refundedMap.get(l.productId) ?? new Prisma.Decimal(0);
       const available = l.quantity.sub(refundedQty);
@@ -3483,7 +3486,7 @@ export class PharmacyController {
 
     if (!requested.length) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    const refundLines: { productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal }[] = [];
+    const refundLines: { productId: string; quantity: Decimal; unitPrice: Decimal }[] = [];
     let subtotal = new Prisma.Decimal(0);
     for (const r of requested) {
       if (!r.productId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
@@ -3496,7 +3499,7 @@ export class PharmacyController {
       subtotal = subtotal.add(r.quantity.mul(originalLine.unitPrice));
     }
 
-    const refund = await this.prisma.$transaction(async (tx) => {
+    const refund = await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const created = await tx.shopInvoice.create({
         data: {
           tenantId,
@@ -3599,7 +3602,7 @@ export class PharmacyController {
 
       let grossSubtotal = new Prisma.Decimal(0);
       let lineDiscountTotal = new Prisma.Decimal(0);
-      const normalizedLines: { productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal; discountAmount: Prisma.Decimal; netTotal: Prisma.Decimal }[] =
+      const normalizedLines: { productId: string; quantity: Decimal; unitPrice: Decimal; lineTotal: Decimal; discountAmount: Decimal; netTotal: Decimal }[] =
         [];
 
       for (const l of calcLines) {
@@ -3640,13 +3643,13 @@ export class PharmacyController {
       }
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       await tx.shopInvoice.update({ where: { id }, data: updates });
       if (nextLines) {
         await tx.shopInvoiceLine.deleteMany({ where: { tenantId, invoiceId: id } });
         if (calcLines && calcLines.length) {
           await tx.shopInvoiceLine.createMany({
-            data: (calcLines as { productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal; discountAmount: Prisma.Decimal; netTotal: Prisma.Decimal }[]).map((l) => ({
+            data: (calcLines as { productId: string; quantity: Decimal; unitPrice: Decimal; lineTotal: Decimal; discountAmount: Decimal; netTotal: Decimal }[]).map((l) => ({
               tenantId,
               invoiceId: id,
               productId: l.productId,
@@ -3686,7 +3689,7 @@ export class PharmacyController {
     });
     if (lines.length === 0) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    let original: { id: string; kind: "sale" | "refund"; status: "draft" | "posted" | "void"; locationId: string | null; lines: { productId: string; quantity: Prisma.Decimal }[] } | null = null;
+    let original: { id: string; kind: "sale" | "refund"; status: "draft" | "posted" | "void"; locationId: string | null; lines: { productId: string; quantity: Decimal }[] } | null = null;
 
     if (invoice.kind === "sale") {
       const stock = await this.prisma.shopStockItem.findMany({
@@ -3735,7 +3738,7 @@ export class PharmacyController {
       throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const settings = await tx.shopSettings.upsert({
         where: { tenantId },
         update: {},
@@ -3803,10 +3806,10 @@ export class PharmacyController {
             })
           : [];
 
-      const originalLotTotalsByProduct = new Map<string, Map<string, { expiryDate: Date | null; createdAt: Date; quantity: Prisma.Decimal }>>();
+      const originalLotTotalsByProduct = new Map<string, Map<string, { expiryDate: Date | null; createdAt: Date; quantity: Decimal }>>();
       for (const row of originalAllocRows) {
         const pid = row.line.productId;
-        const map = originalLotTotalsByProduct.get(pid) ?? new Map<string, { expiryDate: Date | null; createdAt: Date; quantity: Prisma.Decimal }>();
+        const map = originalLotTotalsByProduct.get(pid) ?? new Map<string, { expiryDate: Date | null; createdAt: Date; quantity: Decimal }>();
         const existing = map.get(row.lotId);
         if (existing) {
           existing.quantity = existing.quantity.add(row.quantity);
@@ -3816,19 +3819,19 @@ export class PharmacyController {
         originalLotTotalsByProduct.set(pid, map);
       }
 
-      const alreadyRefundedByProductLot = new Map<string, Map<string, Prisma.Decimal>>();
+      const alreadyRefundedByProductLot = new Map<string, Map<string, Decimal>>();
       for (const row of refundedAllocRows) {
         const pid = row.line.productId;
-        const map = alreadyRefundedByProductLot.get(pid) ?? new Map<string, Prisma.Decimal>();
+        const map = alreadyRefundedByProductLot.get(pid) ?? new Map<string, Decimal>();
         map.set(row.lotId, (map.get(row.lotId) ?? new Prisma.Decimal(0)).add(row.quantity));
         alreadyRefundedByProductLot.set(pid, map);
       }
 
-      const availablePerProductLot = new Map<string, Map<string, Prisma.Decimal>>();
+      const availablePerProductLot = new Map<string, Map<string, Decimal>>();
       const orderedOriginalLots = new Map<string, Array<{ lotId: string; expiryDate: Date | null; createdAt: Date }>>();
       for (const [pid, lotsMap] of originalLotTotalsByProduct.entries()) {
-        const refundedMap = alreadyRefundedByProductLot.get(pid) ?? new Map<string, Prisma.Decimal>();
-        const availMap = new Map<string, Prisma.Decimal>();
+        const refundedMap = alreadyRefundedByProductLot.get(pid) ?? new Map<string, Decimal>();
+        const availMap = new Map<string, Decimal>();
         const ordered: Array<{ lotId: string; expiryDate: Date | null; createdAt: Date }> = [];
         for (const [lotId, info] of lotsMap.entries()) {
           const refundedQty = refundedMap.get(lotId) ?? new Prisma.Decimal(0);
@@ -3884,7 +3887,7 @@ export class PharmacyController {
           if (remaining.gt(0) && lots.length) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.stockInsufficient" } }, 400);
         } else if (invoice.kind === "refund" && trackLots) {
           let remaining = l.quantity;
-          const availLots = availablePerProductLot.get(l.productId) ?? new Map<string, Prisma.Decimal>();
+          const availLots = availablePerProductLot.get(l.productId) ?? new Map<string, Decimal>();
           const ordered = orderedOriginalLots.get(l.productId) ?? [];
           for (const lotRef of ordered) {
             if (remaining.lte(0)) break;
@@ -3943,7 +3946,7 @@ export class PharmacyController {
 
     const note = body.note?.trim() || null;
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: PrismaTypes.TransactionClient) => {
       const invoice = await tx.shopInvoice.findFirst({
         where: { tenantId, id, moduleId: "pharmacy" },
         select: { id: true, kind: true, status: true, locationId: true, subtotal: true, paidTotal: true, roundingAdjustment: true }

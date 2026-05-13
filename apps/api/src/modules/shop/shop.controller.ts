@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpException, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { Prisma } from "@prisma/client";
+import type { Prisma as PrismaTypes } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/library";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TenantGuard } from "../../shared/tenant.guard";
 import { PermissionsGuard } from "../../shared/permissions.guard";
@@ -26,34 +27,36 @@ import { ListShopAuditQueryDto } from "./dto/audit.dto";
 import { ShopAuditExportLogDto } from "./dto/audit-export.dto";
 import { ReportsRangeQueryDto } from "./dto/reports.dto";
 
+const Prisma = { Decimal };
+
 function toInt(raw: string | undefined, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(1, Math.floor(n));
 }
 
-function toDecimalOrZero(raw: string | undefined | null): Prisma.Decimal {
-  if (!raw) return new Prisma.Decimal(0);
+function toDecimalOrZero(raw: string | undefined | null): Decimal {
+  if (!raw) return new Decimal(0);
   try {
-    const d = new Prisma.Decimal(raw);
-    if (!d.isFinite()) return new Prisma.Decimal(0);
+    const d = new Decimal(raw);
+    if (!d.isFinite()) return new Decimal(0);
     return d;
   } catch {
-    return new Prisma.Decimal(0);
+    return new Decimal(0);
   }
 }
 
-function clampDecimal(value: Prisma.Decimal, min: Prisma.Decimal, max: Prisma.Decimal): Prisma.Decimal {
+function clampDecimal(value: Decimal, min: Decimal, max: Decimal): Decimal {
   if (value.lt(min)) return min;
   if (value.gt(max)) return max;
   return value;
 }
 
-function roundToIncrement(amount: Prisma.Decimal, increment: Prisma.Decimal): Prisma.Decimal {
+function roundToIncrement(amount: Decimal, increment: Decimal): Decimal {
   if (increment.lte(0)) return amount;
   const q = amount.div(increment);
-  const rq = q.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
-  return rq.mul(increment).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+  const rq = q.toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  return rq.mul(increment).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 }
 
 function parseDateOrNull(raw: string | undefined): Date | null {
@@ -118,8 +121,8 @@ function defaultPaymentMethods(): { name: string; kind: "cash" | "card" | "bank"
   ];
 }
 
-function toDecimal(value: string): Prisma.Decimal {
-  return new Prisma.Decimal(value);
+function toDecimal(value: string): Decimal {
+  return new Decimal(value);
 }
 
 function formatInvoiceNumber(n: number): string {
@@ -1656,14 +1659,14 @@ export class ShopController {
         where: { tenantId, invoiceId: invoice.refundOfId },
         select: { productId: true, quantity: true }
       });
-      const purchasedQtyByProduct = new Map<string, Prisma.Decimal>();
+      const purchasedQtyByProduct = new Map<string, Decimal>();
       for (const l of purchasedLines) purchasedQtyByProduct.set(l.productId, (purchasedQtyByProduct.get(l.productId) ?? new Prisma.Decimal(0)).add(l.quantity));
 
       const refundedLines = await tx.shopPurchaseInvoiceLine.findMany({
         where: { tenantId, invoice: { is: { moduleId: "shop", refundOfId: invoice.refundOfId, kind: "refund", status: "posted" } } },
         select: { productId: true, quantity: true }
       });
-      const refundedQtyByProduct = new Map<string, Prisma.Decimal>();
+      const refundedQtyByProduct = new Map<string, Decimal>();
       for (const l of refundedLines) refundedQtyByProduct.set(l.productId, (refundedQtyByProduct.get(l.productId) ?? new Prisma.Decimal(0)).add(l.quantity));
 
       for (const l of lines) {
@@ -2315,7 +2318,7 @@ export class ShopController {
     const refundedMap = new Map(refunded.map((r) => [r.productId, r._sum.quantity ?? new Prisma.Decimal(0)]));
 
     const originalMap = new Map(original.lines.map((l) => [l.productId, l]));
-    const availableMap = new Map<string, Prisma.Decimal>();
+    const availableMap = new Map<string, Decimal>();
     for (const l of original.lines) {
       const refundedQty = refundedMap.get(l.productId) ?? new Prisma.Decimal(0);
       const available = l.quantity.sub(refundedQty);
@@ -2328,7 +2331,7 @@ export class ShopController {
 
     if (!requested.length) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
-    const refundLines: { productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal }[] = [];
+    const refundLines: { productId: string; quantity: Decimal; unitPrice: Decimal }[] = [];
     let subtotal = new Prisma.Decimal(0);
     for (const r of requested) {
       if (!r.productId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
@@ -3038,7 +3041,7 @@ export class ShopController {
 
       let grossSubtotal = new Prisma.Decimal(0);
       let lineDiscountTotal = new Prisma.Decimal(0);
-      const normalizedLines: { productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal; discountAmount: Prisma.Decimal; netTotal: Prisma.Decimal }[] =
+      const normalizedLines: { productId: string; quantity: Decimal; unitPrice: Decimal; lineTotal: Decimal; discountAmount: Decimal; netTotal: Decimal }[] =
         [];
 
       for (const l of calcLines) {
@@ -3085,7 +3088,7 @@ export class ShopController {
         await tx.shopInvoiceLine.deleteMany({ where: { tenantId, invoiceId: id } });
         if (calcLines && calcLines.length) {
           await tx.shopInvoiceLine.createMany({
-            data: (calcLines as { productId: string; quantity: Prisma.Decimal; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal; discountAmount: Prisma.Decimal; netTotal: Prisma.Decimal }[]).map((l) => ({
+            data: (calcLines as { productId: string; quantity: Decimal; unitPrice: Decimal; lineTotal: Decimal; discountAmount: Decimal; netTotal: Decimal }[]).map((l) => ({
               tenantId,
               invoiceId: id,
               productId: l.productId,
@@ -3506,7 +3509,7 @@ export class ShopController {
       take: 200
     });
 
-    const stockMap = new Map<string, Prisma.Decimal>();
+    const stockMap = new Map<string, Decimal>();
     if (effectiveLocationId) {
       const stock = await this.prisma.shopStockItem.findMany({
         where: { tenantId, locationId: effectiveLocationId, product: { is: { moduleId: "shop" } }, location: { is: { moduleId: "shop" } } },

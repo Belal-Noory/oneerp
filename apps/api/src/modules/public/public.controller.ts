@@ -28,7 +28,7 @@ export class PublicController {
     });
 
     return {
-      data: modules.map((m) => ({
+      data: modules.map((m: { id: string; version: string; nameKey: string; descriptionKey: string; category: string; icon: string; isActive: boolean }) => ({
         id: m.id,
         version: m.version,
         name_key: m.nameKey,
@@ -48,7 +48,7 @@ export class PublicController {
     });
 
     return {
-      data: plans.map((p) => ({
+      data: plans.map((p: { code: string; nameKey: string; descriptionKey: string; isActive: boolean }) => ({
         code: p.code,
         name_key: p.nameKey,
         description_key: p.descriptionKey,
