@@ -23,6 +23,9 @@ export default async function OwnerLayout(props: { children: React.ReactNode }) 
               <Link className="text-gray-700 hover:text-gray-900" href="/tenants">
                 {t("app.owner.nav.tenants")}
               </Link>
+              <Link className="text-gray-700 hover:text-gray-900" href="/tutorials">
+                {t("app.owner.nav.tutorials")}
+              </Link>
             </nav>
           </div>
           <OwnerUserMenu />
@@ -32,4 +35,3 @@ export default async function OwnerLayout(props: { children: React.ReactNode }) 
     </div>
   );
 }
-

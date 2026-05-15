@@ -6,7 +6,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { TenantGuard } from "../../shared/tenant.guard";
 import { PermissionsGuard } from "../../shared/permissions.guard";
 import { RequirePermissions } from "../../shared/permissions.decorator";
-import { ensureFuelDefaultRolePermissions, ensureMspDefaultRolePermissions } from "../../shared/module-enabled.guard";
+import { ensureFuelDefaultRolePermissions, ensureMspDefaultRolePermissions, ensurePrintPressDefaultRolePermissions } from "../../shared/module-enabled.guard";
 import { UpdateTenantBrandingDto, UpdateTenantDto } from "./dto/update-tenant.dto";
 import { InviteUserDto, UpdateMembershipDto } from "./dto/team.dto";
 
@@ -14,19 +14,59 @@ import { InviteUserDto, UpdateMembershipDto } from "./dto/team.dto";
 export class TenantsController {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async ensureMspModuleCatalog(): Promise<void> {
+  private async ensureCoreModuleCatalog(): Promise<void> {
     await this.prisma.moduleCatalog.upsert({
       where: { id: "msp" },
       update: { version: "1.0.0", category: "operations", icon: "msp", isActive: true, nameKey: "module.msp.name", descriptionKey: "module.msp.description", manifestJson: {} },
       create: { id: "msp", version: "1.0.0", category: "operations", icon: "msp", isActive: true, nameKey: "module.msp.name", descriptionKey: "module.msp.description", manifestJson: {} }
     });
+    await this.prisma.moduleCatalog.upsert({
+      where: { id: "printpress" },
+      update: {
+        version: "1.0.0",
+        category: "operations",
+        icon: "printpress",
+        isActive: true,
+        nameKey: "module.printpress.name",
+        descriptionKey: "module.printpress.description",
+        manifestJson: {}
+      },
+      create: {
+        id: "printpress",
+        version: "1.0.0",
+        category: "operations",
+        icon: "printpress",
+        isActive: true,
+        nameKey: "module.printpress.name",
+        descriptionKey: "module.printpress.description",
+        manifestJson: {}
+      }
+    });
+  }
+
+  private resolvePublicWebBaseUrl(headers?: Record<string, unknown>): string {
+    const fromEnv = (process.env.PUBLIC_WEB_URL ?? process.env.PUBLIC_WEB_BASE_URL ?? "").trim();
+    if (fromEnv) return fromEnv.replace(/\/+$/, "");
+
+    const protoRaw = typeof headers?.["x-forwarded-proto"] === "string" ? (headers["x-forwarded-proto"] as string) : null;
+    const hostRaw =
+      (typeof headers?.["x-forwarded-host"] === "string" ? (headers["x-forwarded-host"] as string) : null) ??
+      (typeof headers?.host === "string" ? (headers.host as string) : null);
+
+    const host = hostRaw?.split(",")[0]?.trim() ?? null;
+    const proto = (protoRaw?.split(",")[0]?.trim() ?? "").toLowerCase() === "https" ? "https" : "http";
+    if (host) {
+      const bare = host.replace(/^(www|app|owner|api)\./, "");
+      return `${proto}://${bare}`;
+    }
+    return "http://localhost:3000";
   }
 
   @Get("current/modules")
   @UseGuards(AuthGuard("jwt"), TenantGuard, PermissionsGuard)
   @RequirePermissions("platform.modules.catalog.read", "platform.modules.enabled.read")
   async listModulesForTenant(@Req() req: { tenantId: string }) {
-    await this.ensureMspModuleCatalog();
+    await this.ensureCoreModuleCatalog();
 
     const [catalog, enabled, subscription] = await Promise.all([
       this.prisma.moduleCatalog.findMany({
@@ -93,7 +133,7 @@ export class TenantsController {
   @UseGuards(AuthGuard("jwt"), TenantGuard, PermissionsGuard)
   @RequirePermissions("platform.modules.enable")
   async enableModule(@Req() req: { tenantId: string; user: { id: string } }, @Param("moduleId") moduleId: string) {
-    await this.ensureMspModuleCatalog();
+    await this.ensureCoreModuleCatalog();
 
     const mod = await this.prisma.moduleCatalog.findUnique({ where: { id: moduleId }, select: { id: true, isActive: true } });
     if (!mod) {
@@ -125,6 +165,9 @@ export class TenantsController {
     }
     if (moduleId === "msp") {
       await ensureMspDefaultRolePermissions(this.prisma, req.tenantId);
+    }
+    if (moduleId === "printpress") {
+      await ensurePrintPressDefaultRolePermissions(this.prisma, req.tenantId);
     }
 
     if (moduleId === "shop") {
@@ -245,7 +288,7 @@ export class TenantsController {
   @UseGuards(AuthGuard("jwt"), TenantGuard, PermissionsGuard)
   @RequirePermissions("platform.modules.enabled.read", "platform.modules.catalog.read")
   async requestModule(@Req() req: { tenantId: string; user: { id: string } }, @Param("moduleId") moduleId: string) {
-    await this.ensureMspModuleCatalog();
+    await this.ensureCoreModuleCatalog();
 
     const mod = await this.prisma.moduleCatalog.findUnique({ where: { id: moduleId }, select: { id: true, isActive: true } });
     if (!mod) {
@@ -443,7 +486,7 @@ export class TenantsController {
   @Post("current/team/invite")
   @UseGuards(AuthGuard("jwt"), TenantGuard, PermissionsGuard)
   @RequirePermissions("platform.users.invite", "platform.memberships.update")
-  async invite(@Req() req: { tenantId: string; user: { id: string } }, @Body() body: InviteUserDto) {
+  async invite(@Req() req: { tenantId: string; user: { id: string }; headers?: Record<string, unknown> }, @Body() body: InviteUserDto) {
     const email = body.email.toLowerCase();
     const fullName = body.fullName?.trim() || "Invited User";
     const roleName = body.roleName ?? "Staff";
@@ -509,7 +552,8 @@ export class TenantsController {
       ]
     });
 
-    const inviteUrl = `http://localhost:3000/invite?token=${token}`;
+    const publicWebBaseUrl = this.resolvePublicWebBaseUrl(req.headers);
+    const inviteUrl = `${publicWebBaseUrl}/invite?token=${token}`;
     return { data: { inviteUrl } };
   }
 

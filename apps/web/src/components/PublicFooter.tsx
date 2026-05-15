@@ -17,10 +17,13 @@ export function PublicFooter(props: { locale: Locale }) {
           </span>
         </div>
         <div className="flex items-center gap-4 text-sm">
-          <Link className="text-gray-700 hover:text-gray-900" href="/terms">
+          <Link className="text-gray-700 hover:text-gray-900" href="/learning-center">
+            {t("common.nav.learningCenter")}
+          </Link>
+          <Link className="text-gray-700 hover:text-gray-900" href="/terms-and-conditions">
             {t("common.footer.terms")}
           </Link>
-          <Link className="text-gray-700 hover:text-gray-900" href="/privacy">
+          <Link className="text-gray-700 hover:text-gray-900" href="/privacy-policy">
             {t("common.footer.privacy")}
           </Link>
           <Link className="text-gray-700 hover:text-gray-900" href="/contact">

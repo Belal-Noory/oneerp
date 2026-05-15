@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpException, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import * as argon2 from "argon2";
 import { Prisma } from "@prisma/client";
@@ -9,6 +9,7 @@ import { ensureFuelDefaultRolePermissions, ensureMspDefaultRolePermissions } fro
 import { ApproveModuleRequestDto, RejectModuleRequestDto } from "./dto/approve-module-request.dto";
 import { SetPeriodDto } from "./dto/set-period.dto";
 import { AddMembershipDto } from "./dto/add-membership.dto";
+import { UpsertTutorialCategoryDto, UpsertTutorialDto, UpsertTutorialSeriesDto } from "./dto/tutorials.dto";
 
 function addDays(d: Date, days: number): Date {
   const x = new Date(d);
@@ -249,7 +250,8 @@ export class OwnerController {
       const tokenHash = createHash("sha256").update(token).digest("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await tx.passwordResetToken.create({ data: { userId: user.id, tenantId, tokenHash, expiresAt } });
-      const inviteUrl = `${process.env.PUBLIC_WEB_URL ?? "http://localhost:3000"}/invite?token=${token}`;
+      const publicWebBaseUrl = (process.env.PUBLIC_WEB_URL ?? process.env.PUBLIC_WEB_BASE_URL ?? "http://localhost:3000").trim().replace(/\/+$/, "");
+      const inviteUrl = `${publicWebBaseUrl}/invite?token=${token}`;
 
       return { user, inviteUrl };
     });
@@ -676,4 +678,485 @@ export class OwnerController {
 
     return { data: { success: true, subscriptionItem: updated } };
   }
+
+  @Get("modules")
+  async listAllModules() {
+    const modules = await this.prisma.moduleCatalog.findMany({
+      select: { id: true, nameKey: true, descriptionKey: true, category: true, icon: true, isActive: true, version: true },
+      orderBy: { id: "asc" }
+    });
+    return {
+      data: modules.map((m) => ({
+        id: m.id,
+        version: m.version,
+        name_key: m.nameKey,
+        description_key: m.descriptionKey,
+        category: m.category,
+        icon: m.icon,
+        is_active: m.isActive
+      }))
+    };
+  }
+
+  @Get("tutorial-categories")
+  async ownerListTutorialCategories() {
+    const prismaAny = this.prisma as unknown as {
+      tutorialCategory?: { findMany: (args: unknown) => Promise<unknown[]> };
+    };
+    if (!prismaAny.tutorialCategory) return { data: [] };
+
+    const items = (await prismaAny.tutorialCategory.findMany({
+      select: { id: true, slug: true, icon: true, titleEn: true, titleFa: true, titlePs: true, orderNo: true, isActive: true, createdAt: true, updatedAt: true },
+      orderBy: [{ orderNo: "asc" }, { createdAt: "asc" }]
+    })) as Array<{ id: string; slug: string; icon: string; titleEn: string; titleFa: string; titlePs: string; orderNo: number; isActive: boolean; createdAt: Date; updatedAt: Date }>;
+
+    return {
+      data: items.map((c) => ({
+        id: c.id,
+        slug: c.slug,
+        icon: c.icon,
+        title_en: c.titleEn,
+        title_dr: c.titleFa,
+        title_ps: c.titlePs,
+        order_no: c.orderNo,
+        is_active: c.isActive,
+        created_at: c.createdAt,
+        updated_at: c.updatedAt
+      }))
+    };
+  }
+
+  @Post("tutorial-categories")
+  async ownerCreateTutorialCategory(@Body() body: UpsertTutorialCategoryDto) {
+    const prismaAny = this.prisma as unknown as { tutorialCategory?: { create: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorialCategory) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
+
+    const slug = toSlug(body.slug);
+    const created = (await prismaAny.tutorialCategory.create({
+      data: {
+        slug,
+        icon: (body.icon ?? "").trim() || "layers",
+        titleEn: body.titleEn.trim(),
+        titleFa: body.titleFa.trim(),
+        titlePs: body.titlePs.trim(),
+        orderNo: body.orderNo ?? 0,
+        isActive: body.isActive ?? true
+      },
+      select: { id: true, slug: true }
+    })) as { id: string; slug: string };
+
+    return { data: { success: true, id: created.id, slug: created.slug } };
+  }
+
+  @Patch("tutorial-categories/:id")
+  async ownerUpdateTutorialCategory(@Param("id") id: string, @Body() body: UpsertTutorialCategoryDto) {
+    const prismaAny = this.prisma as unknown as { tutorialCategory?: { update: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorialCategory) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
+
+    const slug = toSlug(body.slug);
+    await prismaAny.tutorialCategory.update({
+      where: { id },
+      data: {
+        slug,
+        icon: (body.icon ?? "").trim() || "layers",
+        titleEn: body.titleEn.trim(),
+        titleFa: body.titleFa.trim(),
+        titlePs: body.titlePs.trim(),
+        orderNo: body.orderNo ?? 0,
+        isActive: body.isActive ?? true
+      }
+    });
+
+    return { data: { success: true } };
+  }
+
+  @Delete("tutorial-categories/:id")
+  async ownerDeleteTutorialCategory(@Param("id") id: string) {
+    const prismaAny = this.prisma as unknown as { tutorialCategory?: { delete: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorialCategory) return { data: { success: true } };
+    await prismaAny.tutorialCategory.delete({ where: { id } });
+    return { data: { success: true } };
+  }
+
+  @Get("tutorial-series")
+  async ownerListTutorialSeries() {
+    const prismaAny = this.prisma as unknown as { tutorialSeries?: { findMany: (args: unknown) => Promise<unknown[]> } };
+    if (!prismaAny.tutorialSeries) return { data: [] };
+
+    const items = (await prismaAny.tutorialSeries.findMany({
+      select: {
+        id: true,
+        slug: true,
+        titleEn: true,
+        titleFa: true,
+        titlePs: true,
+        descriptionEn: true,
+        descriptionFa: true,
+        descriptionPs: true,
+        orderNo: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: [{ orderNo: "asc" }, { createdAt: "asc" }]
+    })) as Array<any>;
+
+    return {
+      data: items.map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        title_en: s.titleEn,
+        title_dr: s.titleFa,
+        title_ps: s.titlePs,
+        description_en: s.descriptionEn ?? null,
+        description_dr: s.descriptionFa ?? null,
+        description_ps: s.descriptionPs ?? null,
+        order_no: s.orderNo,
+        is_active: s.isActive,
+        created_at: s.createdAt,
+        updated_at: s.updatedAt
+      }))
+    };
+  }
+
+  @Post("tutorial-series")
+  async ownerCreateTutorialSeries(@Body() body: UpsertTutorialSeriesDto) {
+    const prismaAny = this.prisma as unknown as { tutorialSeries?: { create: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorialSeries) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
+
+    const slug = toSlug(body.slug);
+    const created = (await prismaAny.tutorialSeries.create({
+      data: {
+        slug,
+        titleEn: body.titleEn.trim(),
+        titleFa: body.titleFa.trim(),
+        titlePs: body.titlePs.trim(),
+        descriptionEn: body.descriptionEn?.trim() || null,
+        descriptionFa: body.descriptionFa?.trim() || null,
+        descriptionPs: body.descriptionPs?.trim() || null,
+        orderNo: body.orderNo ?? 0,
+        isActive: body.isActive ?? true
+      },
+      select: { id: true, slug: true }
+    })) as { id: string; slug: string };
+
+    return { data: { success: true, id: created.id, slug: created.slug } };
+  }
+
+  @Patch("tutorial-series/:id")
+  async ownerUpdateTutorialSeries(@Param("id") id: string, @Body() body: UpsertTutorialSeriesDto) {
+    const prismaAny = this.prisma as unknown as { tutorialSeries?: { update: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorialSeries) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
+
+    const slug = toSlug(body.slug);
+    await prismaAny.tutorialSeries.update({
+      where: { id },
+      data: {
+        slug,
+        titleEn: body.titleEn.trim(),
+        titleFa: body.titleFa.trim(),
+        titlePs: body.titlePs.trim(),
+        descriptionEn: body.descriptionEn?.trim() || null,
+        descriptionFa: body.descriptionFa?.trim() || null,
+        descriptionPs: body.descriptionPs?.trim() || null,
+        orderNo: body.orderNo ?? 0,
+        isActive: body.isActive ?? true
+      }
+    });
+
+    return { data: { success: true } };
+  }
+
+  @Delete("tutorial-series/:id")
+  async ownerDeleteTutorialSeries(@Param("id") id: string) {
+    const prismaAny = this.prisma as unknown as { tutorialSeries?: { delete: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorialSeries) return { data: { success: true } };
+    await prismaAny.tutorialSeries.delete({ where: { id } });
+    return { data: { success: true } };
+  }
+
+  @Get("tutorials")
+  async ownerListTutorials(
+    @Query()
+    query: {
+      q?: string;
+      scope?: string;
+      moduleId?: string;
+      categoryId?: string;
+      difficulty?: string;
+      language?: string;
+      visibility?: string;
+      featured?: string;
+      page?: string;
+      pageSize?: string;
+    }
+  ) {
+    const prismaAny = this.prisma as unknown as { tutorial?: { findMany: (args: unknown) => Promise<unknown[]>; count: (args: unknown) => Promise<number> } };
+    if (!prismaAny.tutorial) return { data: [], meta: { page: 1, pageSize: 30, total: 0 } };
+
+    const q = (query.q ?? "").trim();
+    const where: Record<string, unknown> = {};
+    if ((query.scope ?? "").trim()) where.scope = query.scope?.trim();
+    if ((query.moduleId ?? "").trim()) where.moduleId = query.moduleId?.trim();
+    if ((query.categoryId ?? "").trim()) where.categoryId = query.categoryId?.trim();
+    if ((query.difficulty ?? "").trim()) where.difficulty = query.difficulty?.trim();
+    if ((query.language ?? "").trim()) where.language = query.language?.trim();
+    if ((query.visibility ?? "").trim()) where.visibility = query.visibility?.trim();
+    if ((query.featured ?? "").trim()) where.isFeatured = query.featured === "1";
+    if (q) {
+      where.OR = [
+        { slug: { contains: q, mode: "insensitive" } },
+        { titleEn: { contains: q, mode: "insensitive" } },
+        { titleFa: { contains: q, mode: "insensitive" } },
+        { titlePs: { contains: q, mode: "insensitive" } },
+        { descriptionEn: { contains: q, mode: "insensitive" } },
+        { descriptionFa: { contains: q, mode: "insensitive" } },
+        { descriptionPs: { contains: q, mode: "insensitive" } }
+      ];
+    }
+
+    const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(query.pageSize ?? "30", 10) || 30));
+    const skip = (page - 1) * pageSize;
+
+    const [total, rows] = await Promise.all([
+      prismaAny.tutorial.count({ where }),
+      prismaAny.tutorial.findMany({
+        where,
+        skip,
+        take: pageSize,
+        select: {
+          id: true,
+          slug: true,
+          scope: true,
+          moduleId: true,
+          categoryId: true,
+          seriesId: true,
+          stepNo: true,
+          orderNo: true,
+          titleEn: true,
+          titleFa: true,
+          titlePs: true,
+          descriptionEn: true,
+          descriptionFa: true,
+          descriptionPs: true,
+          youtubeUrl: true,
+          youtubeVideoId: true,
+          thumbnailUrl: true,
+          difficulty: true,
+          language: true,
+          durationSec: true,
+          tags: true,
+          views: true,
+          visibility: true,
+          isFeatured: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }]
+      })
+    ]);
+
+    const items = rows as any[];
+    return {
+      data: items.map((t) => ({
+        id: t.id,
+        slug: t.slug,
+        tutorial_scope: t.scope,
+        module_id: t.moduleId ?? null,
+        category_id: t.categoryId ?? null,
+        series_id: t.seriesId ?? null,
+        step_no: t.stepNo ?? null,
+        order_no: t.orderNo,
+        title_en: t.titleEn,
+        title_dr: t.titleFa,
+        title_ps: t.titlePs,
+        description_en: t.descriptionEn ?? null,
+        description_dr: t.descriptionFa ?? null,
+        description_ps: t.descriptionPs ?? null,
+        youtube_url: t.youtubeUrl,
+        thumbnail_url: t.thumbnailUrl ?? null,
+        youtube_video_id: t.youtubeVideoId ?? null,
+        difficulty: t.difficulty,
+        language: t.language,
+        duration_sec: t.durationSec ?? null,
+        tags: Array.isArray(t.tags) ? t.tags : [],
+        views: t.views,
+        visibility: t.visibility,
+        is_featured: t.isFeatured,
+        is_active: t.isActive,
+        created_at: t.createdAt,
+        updated_at: t.updatedAt
+      })),
+      meta: { page, pageSize, total }
+    };
+  }
+
+  @Post("tutorials")
+  async ownerCreateTutorial(@Body() body: UpsertTutorialDto) {
+    const prismaAny = this.prisma as unknown as {
+      tutorial?: { create: (args: unknown) => Promise<unknown> };
+      tutorialRelation?: { createMany: (args: unknown) => Promise<unknown>; deleteMany: (args: unknown) => Promise<unknown> };
+    };
+    if (!prismaAny.tutorial) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
+
+    const scope = body.scope;
+    const moduleId = scope === "module" ? (body.moduleId ?? "").trim() : "";
+    if (scope === "module" && !moduleId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
+    const slug = toSlug(body.slug);
+    const youtube = body.youtubeUrl.trim();
+    const youtubeVideoId = extractYouTubeVideoId(youtube);
+
+    const created = (await prismaAny.tutorial.create({
+      data: {
+        slug,
+        scope,
+        moduleId: scope === "module" ? moduleId : null,
+        categoryId: (body.categoryId ?? "").trim() || null,
+        seriesId: (body.seriesId ?? "").trim() || null,
+        stepNo: body.stepNo ?? null,
+        orderNo: body.orderNo ?? 0,
+        titleEn: body.titleEn.trim(),
+        titleFa: body.titleFa.trim(),
+        titlePs: body.titlePs.trim(),
+        descriptionEn: body.descriptionEn?.trim() || null,
+        descriptionFa: body.descriptionFa?.trim() || null,
+        descriptionPs: body.descriptionPs?.trim() || null,
+        youtubeUrl: youtube,
+        youtubeVideoId,
+        thumbnailUrl: body.thumbnailUrl?.trim() || null,
+        difficulty: body.difficulty,
+        language: body.language,
+        durationSec: body.durationSec ?? null,
+        tags: (body.tags ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 30),
+        visibility: body.visibility,
+        isFeatured: body.isFeatured ?? false,
+        isActive: body.isActive ?? true
+      },
+      select: { id: true, slug: true }
+    })) as { id: string; slug: string };
+
+    if (prismaAny.tutorialRelation && Array.isArray(body.relatedSlugs) && body.relatedSlugs.length > 0) {
+      const relatedSlugs = body.relatedSlugs.map((x) => toSlug(x)).filter(Boolean).slice(0, 30);
+      const otherIds = await resolveTutorialIdsBySlugs(this.prisma, relatedSlugs);
+      if (otherIds.length > 0) {
+        await prismaAny.tutorialRelation.createMany({
+          data: otherIds.map((relatedTutorialId: string, idx: number) => ({ tutorialId: created.id, relatedTutorialId, orderNo: idx })),
+          skipDuplicates: true
+        });
+      }
+    }
+
+    return { data: { success: true, id: created.id, slug: created.slug } };
+  }
+
+  @Patch("tutorials/:id")
+  async ownerUpdateTutorial(@Param("id") id: string, @Body() body: UpsertTutorialDto) {
+    const prismaAny = this.prisma as unknown as {
+      tutorial?: { update: (args: unknown) => Promise<unknown> };
+      tutorialRelation?: { createMany: (args: unknown) => Promise<unknown>; deleteMany: (args: unknown) => Promise<unknown> };
+    };
+    if (!prismaAny.tutorial) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
+
+    const scope = body.scope;
+    const moduleId = scope === "module" ? (body.moduleId ?? "").trim() : "";
+    if (scope === "module" && !moduleId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
+    const slug = toSlug(body.slug);
+    const youtube = body.youtubeUrl.trim();
+    const youtubeVideoId = extractYouTubeVideoId(youtube);
+
+    await prismaAny.tutorial.update({
+      where: { id },
+      data: {
+        slug,
+        scope,
+        moduleId: scope === "module" ? moduleId : null,
+        categoryId: (body.categoryId ?? "").trim() || null,
+        seriesId: (body.seriesId ?? "").trim() || null,
+        stepNo: body.stepNo ?? null,
+        orderNo: body.orderNo ?? 0,
+        titleEn: body.titleEn.trim(),
+        titleFa: body.titleFa.trim(),
+        titlePs: body.titlePs.trim(),
+        descriptionEn: body.descriptionEn?.trim() || null,
+        descriptionFa: body.descriptionFa?.trim() || null,
+        descriptionPs: body.descriptionPs?.trim() || null,
+        youtubeUrl: youtube,
+        youtubeVideoId,
+        thumbnailUrl: body.thumbnailUrl?.trim() || null,
+        difficulty: body.difficulty,
+        language: body.language,
+        durationSec: body.durationSec ?? null,
+        tags: (body.tags ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 30),
+        visibility: body.visibility,
+        isFeatured: body.isFeatured ?? false,
+        isActive: body.isActive ?? true
+      }
+    });
+
+    if (prismaAny.tutorialRelation) {
+      await prismaAny.tutorialRelation.deleteMany({ where: { tutorialId: id } });
+      const relatedSlugs = (body.relatedSlugs ?? []).map((x) => toSlug(x)).filter(Boolean).slice(0, 30);
+      const otherIds = await resolveTutorialIdsBySlugs(this.prisma, relatedSlugs);
+      if (otherIds.length > 0) {
+        await prismaAny.tutorialRelation.createMany({
+          data: otherIds.map((relatedTutorialId: string, idx: number) => ({ tutorialId: id, relatedTutorialId, orderNo: idx })),
+          skipDuplicates: true
+        });
+      }
+    }
+
+    return { data: { success: true } };
+  }
+
+  @Delete("tutorials/:id")
+  async ownerDeleteTutorial(@Param("id") id: string) {
+    const prismaAny = this.prisma as unknown as { tutorial?: { delete: (args: unknown) => Promise<unknown> } };
+    if (!prismaAny.tutorial) return { data: { success: true } };
+    await prismaAny.tutorial.delete({ where: { id } });
+    return { data: { success: true } };
+  }
+}
+
+function toSlug(value: string): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+    .slice(0, 80);
+}
+
+function extractYouTubeVideoId(url: string): string | null {
+  const raw = (url ?? "").trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") {
+      const id = u.pathname.replace(/^\/+/, "").split("/")[0] ?? "";
+      return id || null;
+    }
+    if (host.endsWith("youtube.com")) {
+      const v = u.searchParams.get("v");
+      if (v) return v;
+      const parts = u.pathname.split("/").filter(Boolean);
+      const idx = parts.findIndex((p) => p === "embed" || p === "shorts");
+      if (idx >= 0 && parts[idx + 1]) return parts[idx + 1]!;
+    }
+  } catch {}
+  return null;
+}
+
+async function resolveTutorialIdsBySlugs(prisma: PrismaService, slugs: string[]): Promise<string[]> {
+  if (slugs.length === 0) return [];
+  const prismaAny = prisma as unknown as { tutorial?: { findMany: (args: unknown) => Promise<unknown[]> } };
+  if (!prismaAny.tutorial) return [];
+  const rows = (await prismaAny.tutorial.findMany({ where: { slug: { in: slugs } }, select: { id: true, slug: true } })) as Array<{ id: string; slug: string }>;
+  const bySlug = new Map(rows.map((r) => [r.slug, r.id]));
+  return slugs.map((s) => bySlug.get(s)).filter(Boolean) as string[];
 }

@@ -477,6 +477,117 @@ model WaitlistSignup {
   @@index([createdAt(sort: Desc)])
 }
 
+model PublicContactSubmission {
+  id               String   @id @default(uuid())
+  fullName         String
+  organizationName String?
+  email            String
+  phoneNumber      String
+  serviceType      String
+  message          String
+  locale           String?
+  ip               String?
+  userAgent        String?
+  createdAt        DateTime @default(now())
+
+  @@index([email])
+  @@index([createdAt(sort: Desc)])
+}
+
+model TutorialCategory {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  icon      String
+  titleEn   String
+  titleFa   String
+  titlePs   String
+  orderNo   Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tutorials Tutorial[]
+
+  @@index([isActive, orderNo])
+}
+
+model TutorialSeries {
+  id            String   @id @default(uuid())
+  slug          String   @unique
+  titleEn       String
+  titleFa       String
+  titlePs       String
+  descriptionEn String?
+  descriptionFa String?
+  descriptionPs String?
+  orderNo       Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tutorials Tutorial[]
+
+  @@index([isActive, orderNo])
+}
+
+model Tutorial {
+  id             String   @id @default(uuid())
+  slug           String   @unique
+  scope          String
+  moduleId       String?
+  categoryId     String?
+  seriesId       String?
+  stepNo         Int?
+  orderNo        Int      @default(0)
+  titleEn        String
+  titleFa        String
+  titlePs        String
+  descriptionEn  String?
+  descriptionFa  String?
+  descriptionPs  String?
+  youtubeUrl     String
+  youtubeVideoId String?
+  thumbnailUrl   String?
+  difficulty     String
+  language       String
+  durationSec    Int?
+  tags           String[] @default([])
+  views          Int      @default(0)
+  visibility     String
+  isFeatured     Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  module   ModuleCatalog?    @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  category TutorialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  series   TutorialSeries?   @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+
+  relatedFrom TutorialRelation[] @relation("TutorialRelationFrom")
+  relatedTo   TutorialRelation[] @relation("TutorialRelationTo")
+
+  @@index([scope, moduleId, categoryId])
+  @@index([visibility, isActive])
+  @@index([isFeatured, visibility])
+  @@index([views])
+  @@index([createdAt(sort: Desc)])
+  @@index([updatedAt(sort: Desc)])
+}
+
+model TutorialRelation {
+  id               String   @id @default(uuid())
+  tutorialId       String
+  relatedTutorialId String
+  orderNo          Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  tutorial        Tutorial @relation("TutorialRelationFrom", fields: [tutorialId], references: [id], onDelete: Cascade)
+  relatedTutorial Tutorial @relation("TutorialRelationTo", fields: [relatedTutorialId], references: [id], onDelete: Cascade)
+
+  @@unique([tutorialId, relatedTutorialId])
+  @@index([tutorialId, orderNo])
+}
+
 model ShopCategory {
   id        String   @id @default(uuid())
   tenantId  String

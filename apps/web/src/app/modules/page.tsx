@@ -270,6 +270,12 @@ export default function ModulesPage() {
             <div className="mt-8 flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
               {selected.is_active ? (
                 <>
+                  <a
+                    href={`/learning-center?scope=module&moduleId=${encodeURIComponent(selected.id)}`}
+                    className="inline-flex h-10 items-center justify-center rounded-md border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-50"
+                  >
+                    {t("public.learning.viewAll")}
+                  </a>
                   {selected.id === "msp" ? (
                     <button
                       type="button"
@@ -290,17 +296,25 @@ export default function ModulesPage() {
                   </a>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setWaitlistOpen(true);
-                    setWaitlistModule(selected);
-                    setSelectedId(null);
-                  }}
-                  className="inline-flex h-10 items-center justify-center rounded-md bg-gray-900 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-                >
-                  {t("public.modules.modal.cta.joinWaitlist")}
-                </button>
+                <>
+                  <a
+                    href={`/learning-center?scope=module&moduleId=${encodeURIComponent(selected.id)}`}
+                    className="inline-flex h-10 items-center justify-center rounded-md border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 shadow-sm hover:bg-gray-50"
+                  >
+                    {t("public.learning.viewAll")}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWaitlistOpen(true);
+                      setWaitlistModule(selected);
+                      setSelectedId(null);
+                    }}
+                    className="inline-flex h-10 items-center justify-center rounded-md bg-gray-900 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
+                  >
+                    {t("public.modules.modal.cta.joinWaitlist")}
+                  </button>
+                </>
               )}
             </div>
           </div>

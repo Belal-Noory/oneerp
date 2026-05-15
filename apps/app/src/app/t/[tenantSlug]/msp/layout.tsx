@@ -13,6 +13,16 @@ type TenantModulesResponse = {
   }>;
 };
 
+function joinUrl(base: string, path: string): string {
+  if (path.startsWith("http")) return path;
+  const b = base.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  if (b.endsWith("/api") && (p === "/api" || p.startsWith("/api/"))) {
+    return `${b.slice(0, -4)}${p}`;
+  }
+  return `${b}${p}`;
+}
+
 export default async function MspLayout(props: { children: React.ReactNode; params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await props.params;
   const locale = await getRequestLocale();
@@ -21,14 +31,14 @@ export default async function MspLayout(props: { children: React.ReactNode; para
   const apiBaseUrl = getApiBaseUrl();
   const cookieHeader = (await cookies()).toString();
 
-  const meRes = await fetch(`${apiBaseUrl}/api/me`, { cache: "no-store", headers: cookieHeader ? { cookie: cookieHeader } : {} });
+  const meRes = await fetch(joinUrl(apiBaseUrl, "/api/me"), { cache: "no-store", headers: cookieHeader ? { cookie: cookieHeader } : {} });
   const meJson = (await meRes.json().catch(() => null)) as MeResponse | null;
   const membership = meRes.ok ? (meJson?.data?.memberships ?? []).find((m) => m.tenantSlug === tenantSlug) ?? null : null;
   const tenantId = membership?.tenantId ?? null;
 
   let status: string | null = null;
   if (tenantId) {
-    const modsRes = await fetch(`${apiBaseUrl}/api/tenants/current/modules`, {
+    const modsRes = await fetch(joinUrl(apiBaseUrl, "/api/tenants/current/modules"), {
       cache: "no-store",
       headers: { ...(cookieHeader ? { cookie: cookieHeader } : {}), "X-Tenant-Id": tenantId }
     });

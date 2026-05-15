@@ -15,6 +15,7 @@ import { OwnerModule } from "./modules/owner/owner.module";
 import { OfflineModule } from "./modules/offline/offline.module";
 import { FuelModule } from "./modules/fuel/fuel.module";
 import { MspModule } from "./modules/msp/msp.module";
+import { PrintPressModule } from "./modules/printpress/printpress.module";
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { MspModule } from "./modules/msp/msp.module";
     OwnerModule,
     OfflineModule,
     FuelModule,
-    MspModule
+    MspModule,
+    PrintPressModule
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }]
 })

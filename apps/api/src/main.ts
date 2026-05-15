@@ -7,7 +7,8 @@ import { RequestIdInterceptor } from "./shared/request-id.interceptor";
 import { ApiExceptionFilter } from "./shared/api-exception.filter";
 
 async function bootstrap() {
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:3001,http://localhost:3002")
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 
+    "http://localhost:3000,http://localhost:3001,http://localhost:3002")
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean);

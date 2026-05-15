@@ -27,6 +27,24 @@ function addDays(d: Date, days: number): Date {
   return x;
 }
 
+function resolvePublicWebBaseUrl(headers?: Record<string, unknown>): string {
+  const fromEnv = (process.env.PUBLIC_WEB_URL ?? process.env.PUBLIC_WEB_BASE_URL ?? "").trim();
+  if (fromEnv) return fromEnv.replace(/\/+$/, "");
+
+  const protoRaw = typeof headers?.["x-forwarded-proto"] === "string" ? (headers["x-forwarded-proto"] as string) : null;
+  const hostRaw =
+    (typeof headers?.["x-forwarded-host"] === "string" ? (headers["x-forwarded-host"] as string) : null) ??
+    (typeof headers?.host === "string" ? (headers.host as string) : null);
+
+  const host = hostRaw?.split(",")[0]?.trim() ?? null;
+  const proto = (protoRaw?.split(",")[0]?.trim() ?? "").toLowerCase() === "https" ? "https" : "http";
+  if (host) {
+    const bare = host.replace(/^(www|app|owner|api)\./, "");
+    return `${proto}://${bare}`;
+  }
+  return "http://localhost:3000";
+}
+
 function uuidFromString(input: string): string {
   const hash = crypto.createHash("sha256").update(input).digest();
   const b = Buffer.from(hash.subarray(0, 16));
@@ -548,7 +566,7 @@ export class OfflineController {
   @Post("push")
   @UseGuards(AuthGuard("jwt"), TenantGuard)
   async push(
-    @Req() req: { tenantId: string; user: { id: string } },
+    @Req() req: { tenantId: string; user: { id: string }; headers?: Record<string, unknown> },
     @Body()
     body: {
       events?: Array<{
@@ -752,7 +770,8 @@ export class OfflineController {
               ]
             });
 
-            const inviteUrl = `http://localhost:3000/invite?token=${token}`;
+            const publicWebBaseUrl = resolvePublicWebBaseUrl(req.headers as Record<string, unknown> | undefined);
+            const inviteUrl = `${publicWebBaseUrl}/invite?token=${token}`;
             results.push({ entityType: "tenant_invite", eventId: e.id, entityLocalId: e.entityLocalId, operation: e.operation, ok: true, inviteUrl });
             processedIds.push(e.id);
             continue;

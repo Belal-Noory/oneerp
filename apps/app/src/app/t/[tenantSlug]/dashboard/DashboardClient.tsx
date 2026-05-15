@@ -248,6 +248,7 @@ function moduleHref(tenantSlug: string, id: string): string | null {
   if (id === "pharmacy") return `/t/${tenantSlug}/pharmacy`;
   if (id === "fuel") return `/t/${tenantSlug}/fuel`;
   if (id === "msp") return `/t/${tenantSlug}/msp`;
+  if (id === "printpress") return `/t/${tenantSlug}/printpress`;
   return null;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useClientI18n } from "@/lib/client-i18n";
 import { apiFetch } from "@/lib/auth-fetch";
 
@@ -16,6 +16,7 @@ export default function AppLoginPage() {
   const [mode, setMode] = useState<"online" | "offline">("online");
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const resetHref = useMemo(() => resolvePublicWebUrl("/reset"), []);
 
   return (
     <div className="mx-auto max-w-md">
@@ -73,7 +74,7 @@ export default function AppLoginPage() {
               required
             />
             <div className="mt-3 text-right text-sm">
-              <Link className="text-primary-700 hover:text-primary-800" href="http://localhost:3000/reset">
+              <Link className="text-primary-700 hover:text-primary-800" href={resetHref}>
                 {t("auth.login.link.forgotPassword")}
               </Link>
             </div>
@@ -108,4 +109,21 @@ export default function AppLoginPage() {
       </div>
     </div>
   );
+}
+
+function resolvePublicWebUrl(path: string): string {
+  const fromEnv = (process.env.NEXT_PUBLIC_WEB_BASE_URL ?? "").trim();
+  const base = (() => {
+    if (fromEnv) return fromEnv.replace(/\/+$/, "");
+    if (typeof window !== "undefined") {
+      const protocol = window.location.protocol === "https:" ? "https" : "http";
+      const host = window.location.hostname.toLowerCase();
+      if (host === "localhost" || host === "127.0.0.1") return `http://${host}:3000`;
+      const bare = host.replace(/^(www|app|owner|api)\./, "");
+      return `${protocol}://${bare}`;
+    }
+    return "http://localhost:3000";
+  })();
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${p}`;
 }

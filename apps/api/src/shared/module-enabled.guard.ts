@@ -5,6 +5,7 @@ type RequestWithTenant = { tenantId?: string };
 
 const fuelPermissionsBackfilledTenants = new Set<string>();
 const mspPermissionsBackfilledTenants = new Set<string>();
+const printPressPermissionsBackfilledTenants = new Set<string>();
 
 const fuelPermissionKeys = [
   "fuel.tanks.view",
@@ -42,6 +43,20 @@ const mspPermissionKeys = [
   "msp.audit.export",
   "msp.settings.view",
   "msp.settings.manage"
+];
+
+const printPressPermissionKeys = [
+  "printpress.dashboard.view",
+  "printpress.customers.view",
+  "printpress.customers.manage",
+  "printpress.jobs.view",
+  "printpress.jobs.manage",
+  "printpress.quotations.view",
+  "printpress.quotations.manage",
+  "printpress.reports.view",
+  "printpress.reports.export",
+  "printpress.settings.view",
+  "printpress.settings.manage"
 ];
 
 export async function ensureFuelDefaultRolePermissions(prisma: PrismaService, tenantId: string): Promise<void> {
@@ -160,6 +175,64 @@ export async function ensureMspDefaultRolePermissions(prisma: PrismaService, ten
   mspPermissionsBackfilledTenants.add(tenantId);
 }
 
+export async function ensurePrintPressDefaultRolePermissions(prisma: PrismaService, tenantId: string): Promise<void> {
+  if (printPressPermissionsBackfilledTenants.has(tenantId)) return;
+
+  await prisma.permissionCatalog.createMany({
+    data: printPressPermissionKeys.map((key) => ({
+      key,
+      labelKey: `permission.${key}`,
+      descriptionKey: `permission.${key}.desc`
+    })),
+    skipDuplicates: true
+  });
+
+  const [roles, permissions] = await Promise.all([
+    prisma.role.findMany({
+      where: { tenantId, isSystem: true, name: { in: ["Admin", "Manager", "Staff", "ReadOnly"] } },
+      select: { id: true, name: true }
+    }),
+    prisma.permissionCatalog.findMany({ select: { key: true } })
+  ]);
+
+  const keys = permissions.map((p: { key: string }) => p.key).filter((k: string) => k.startsWith("printpress."));
+  if (roles.length === 0 || keys.length === 0) {
+    printPressPermissionsBackfilledTenants.add(tenantId);
+    return;
+  }
+
+  const viewKeys = keys.filter((k: string) => k.endsWith(".view"));
+  const byRoleName: Record<string, string[]> = {
+    Admin: keys,
+    Manager: keys,
+    Staff: keys,
+    ReadOnly: viewKeys
+  };
+
+  const data: { tenantId: string; roleId: string; permissionKey: string }[] = [];
+  for (const role of roles) {
+    const roleKeys = byRoleName[role.name] ?? [];
+    for (const permissionKey of roleKeys) data.push({ tenantId, roleId: role.id, permissionKey });
+  }
+
+  if (data.length > 0) {
+    await prisma.rolePermission.createMany({ data, skipDuplicates: true });
+  }
+
+  const membershipsWithExplicitModules = await prisma.membership.findMany({
+    where: { tenantId, status: "active", enabledModules: { some: {} }, role: { is: { name: { not: "Owner" } } } },
+    select: { id: true }
+  });
+  if (membershipsWithExplicitModules.length > 0) {
+    await prisma.membershipEnabledModule.createMany({
+      data: membershipsWithExplicitModules.map((m: { id: string }) => ({ tenantId, membershipId: m.id, moduleId: "printpress" })),
+      skipDuplicates: true
+    });
+  }
+
+  printPressPermissionsBackfilledTenants.add(tenantId);
+}
+
 export function ModuleEnabledGuard(moduleId: string) {
   @Injectable()
   class Guard implements CanActivate {
@@ -196,6 +269,9 @@ export function ModuleEnabledGuard(moduleId: string) {
       }
       if (moduleId === "msp") {
         await ensureMspDefaultRolePermissions(this.prisma, tenantId);
+      }
+      if (moduleId === "printpress") {
+        await ensurePrintPressDefaultRolePermissions(this.prisma, tenantId);
       }
 
       return true;

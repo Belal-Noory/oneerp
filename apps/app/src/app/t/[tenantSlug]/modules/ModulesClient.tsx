@@ -291,6 +291,7 @@ function modulePath(tenantSlug: string, moduleId: string): string | null {
   if (moduleId === "pharmacy") return `/t/${tenantSlug}/pharmacy`;
   if (moduleId === "fuel") return `/t/${tenantSlug}/fuel`;
   if (moduleId === "msp") return `/t/${tenantSlug}/msp`;
+  if (moduleId === "printpress") return `/t/${tenantSlug}/printpress`;
   return null;
 }
 

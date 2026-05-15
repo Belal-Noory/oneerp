@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { t as translate } from "@oneerp/i18n";
 import { getRequestLocale } from "@/lib/locale";
+import { getApiBaseUrl } from "@/lib/api";
 import { HeroGraphic, IconChart, IconGlobe, IconLayers, IconPuzzle, IconShield } from "@/components/Graphics";
 import { Reveal } from "@/components/Reveal";
+
+type TutorialCard = { slug: string; title_en: string; title_dr: string; title_ps: string; thumbnail_url: string | null; difficulty: string; language: string; views: number };
 
 export default async function HomePage() {
   const locale = await getRequestLocale();
   const t = (key: string) => translate(locale, key);
+  const tutorials = await fetchHomeTutorials().catch(() => ({ featured: [] as TutorialCard[], latest: [] as TutorialCard[] }));
 
   return (
     <div className="space-y-16">
@@ -83,6 +87,58 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <section className="space-y-6">
+        <Reveal>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-semibold">{t("public.learning.home.title")}</h2>
+            <Link
+              href="/learning-center"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-900 hover:bg-gray-50"
+            >
+              {t("public.learning.home.viewAll")}
+            </Link>
+          </div>
+        </Reveal>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {(tutorials.featured.length ? tutorials.featured : tutorials.latest).slice(0, 6).map((x, idx) => (
+            <Reveal key={x.slug} delayMs={idx * 40}>
+              <Link href={`/learning-center/${encodeURIComponent(x.slug)}`} className="block rounded-2xl border border-gray-200 bg-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg">
+                <div className="relative overflow-hidden rounded-t-2xl bg-gray-100">
+                  {x.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={x.thumbnail_url} alt="" className="h-40 w-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="h-40 w-full" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-gray-900 shadow">
+                      <svg className="h-5 w-5 translate-x-[1px]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M10 8l6 4-6 4V8Z" fill="currentColor" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="line-clamp-2 text-sm font-semibold text-gray-900">{pick(locale, x)}</div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                    <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2">{t(`public.learning.difficulty.${x.difficulty}`)}</span>
+                    <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2 tabular">
+                      {t("public.learning.views")}: {x.views}
+                    </span>
+                  </div>
+                  <div className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700">
+                    <span>{t("public.learning.home.watch")}</span>
+                    <ArrowRight />
+                  </div>
+                </div>
+              </Link>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
       <Reveal>
         <section className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-8 shadow-card md:flex-row md:items-center">
           <div>
@@ -136,4 +192,42 @@ function getBenefitIcon(titleKey: string) {
   if (titleKey.includes("reporting")) return <IconChart />;
   if (titleKey.includes("localization")) return <IconGlobe />;
   return <IconShield />;
+}
+
+function pick(locale: "en" | "fa" | "ps", obj: { title_en: string; title_dr: string; title_ps: string }) {
+  if (locale === "fa") return obj.title_dr;
+  if (locale === "ps") return obj.title_ps;
+  return obj.title_en;
+}
+
+function joinUrl(base: string, path: string): string {
+  if (path.startsWith("http")) return path;
+  const b = base.replace(/\/$/, "");
+  const p = path.startsWith("/") ? path : `/${path}`;
+  if (b.endsWith("/api") && (p === "/api" || p.startsWith("/api/"))) {
+    return `${b.slice(0, -4)}${p}`;
+  }
+  return `${b}${p}`;
+}
+
+async function fetchHomeTutorials(): Promise<{ featured: TutorialCard[]; latest: TutorialCard[] }> {
+  const apiBase = getApiBaseUrl();
+  const [featuredRes, latestRes] = await Promise.all([
+    fetch(joinUrl(apiBase, "/api/public/tutorials?featured=1&sort=latest&page=1&pageSize=12"), { cache: "no-store" }),
+    fetch(joinUrl(apiBase, "/api/public/tutorials?sort=latest&page=1&pageSize=12"), { cache: "no-store" })
+  ]);
+  const featuredJson = (await featuredRes.json().catch(() => null)) as { data?: TutorialCard[] } | null;
+  const latestJson = (await latestRes.json().catch(() => null)) as { data?: TutorialCard[] } | null;
+  const featured = Array.isArray(featuredJson?.data) ? featuredJson!.data.slice(0, 6) : [];
+  const latest = Array.isArray(latestJson?.data) ? latestJson!.data.slice(0, 6) : [];
+  return { featured, latest };
+}
+
+function ArrowRight() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="m13 6 6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }

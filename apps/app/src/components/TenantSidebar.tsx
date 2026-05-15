@@ -226,6 +226,7 @@ function moduleHref(tenantSlug: string, id: string): string | null {
   if (id === "pharmacy") return `/t/${tenantSlug}/pharmacy`;
   if (id === "fuel") return `/t/${tenantSlug}/fuel`;
   if (id === "msp") return `/t/${tenantSlug}/msp`;
+  if (id === "printpress") return `/t/${tenantSlug}/printpress`;
   return null;
 }
 
@@ -234,6 +235,7 @@ function moduleIcon(id: string) {
   if (id === "pharmacy") return <IconPill />;
   if (id === "fuel") return <IconFuel />;
   if (id === "msp") return <IconMsp />;
+  if (id === "printpress") return <IconPrintPress />;
   return <IconGrid />;
 }
 
@@ -311,6 +313,17 @@ function IconMsp() {
       <path d="M7 7h10M7 12h10M7 17h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       <path d="M5 4h14v16H5V4Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
       <path d="M16.5 9.5c.8 0 1.5.7 1.5 1.5S17.3 12.5 16.5 12.5 15 11.8 15 11s.7-1.5 1.5-1.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconPrintPress() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M7 7V4h10v3" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M7 17v3h10v-3" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M6 9h12a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M8 13h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
