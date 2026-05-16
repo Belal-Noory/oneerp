@@ -589,6 +589,363 @@ model TutorialRelation {
   @@index([tutorialId, orderNo])
 }
 
+model MspSettings {
+  tenantId                 String   @id
+  baseCurrencyCode         String   @default("AFN")
+  updatedAt                DateTime @default(now()) @db.Timestamp(3)
+  nextExchangeTicketNumber Int      @default(1)
+  nextHawalaTransferNumber Int      @default(1)
+  complianceJson           Json?
+}
+
+model MspCurrency {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId  String
+  code      String
+  name      String
+  symbol    String?
+  decimals  Int      @default(2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(3)
+  updatedAt DateTime @default(now()) @db.Timestamp(3)
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model MspExchangeRate {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId       String
+  baseCode       String
+  quoteCode      String
+  effectiveDate  DateTime @db.Date
+  buyRate        Decimal  @db.Decimal(20, 6)
+  sellRate       Decimal  @db.Decimal(20, 6)
+  updatedAt      DateTime @default(now()) @db.Timestamp(3)
+  updatedByUserId String?
+
+  @@unique([tenantId, baseCode, quoteCode, effectiveDate])
+  @@index([tenantId, effectiveDate])
+  @@index([tenantId, baseCode])
+}
+
+model MspExchangeTicket {
+  id                     String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId               String
+  ticketNumber           Int
+  type                   String
+  baseCode               String
+  quoteCode              String
+  effectiveDate          DateTime @db.Date
+  quoteAmount            Decimal  @db.Decimal(20, 6)
+  rate                   Decimal  @db.Decimal(20, 6)
+  baseAmount             Decimal  @db.Decimal(20, 6)
+  feeBase                Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  customerName           String?
+  customerPhone          String?
+  note                   String?
+  createdAt              DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId        String?
+  baseAccountId          String?  @db.Uuid
+  quoteAccountId         String?  @db.Uuid
+  customerId             String?  @db.Uuid
+  valuationCurrencyCode  String?
+  realizedProfitValuation Decimal? @db.Decimal(20, 6)
+  costOfSoldValuation     Decimal? @db.Decimal(20, 6)
+
+  @@unique([tenantId, ticketNumber])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, effectiveDate])
+  @@index([tenantId, type])
+  @@index([tenantId, valuationCurrencyCode])
+  @@index([tenantId, customerId])
+}
+
+model MspAccount {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId      String
+  type          String
+  name          String
+  currencyCode  String
+  branchId      String?  @db.Uuid
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamp(3)
+  updatedAt     DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+  updatedByUserId String?
+  customerId    String?  @db.Uuid
+  partnerId     String?  @db.Uuid
+  systemCode    String?
+
+  @@index([tenantId])
+  @@index([tenantId, currencyCode])
+  @@index([tenantId, type])
+  @@index([tenantId, isActive])
+  @@index([tenantId, customerId])
+  @@index([tenantId, partnerId])
+  @@index([tenantId, systemCode])
+  @@unique([tenantId, customerId, currencyCode])
+  @@unique([tenantId, partnerId, currencyCode])
+  @@unique([tenantId, systemCode, currencyCode])
+}
+
+model MspLedgerEntry {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId      String
+  accountId     String   @db.Uuid
+  entryDate     DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  occurredAt    DateTime @default(now()) @db.Timestamp(3)
+  source        String
+  ref           String?
+  amountSigned  Decimal  @db.Decimal(20, 6)
+  note          String?
+  createdAt     DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+
+  @@index([tenantId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, entryDate])
+}
+
+model MspFxPosition {
+  tenantId             String
+  currencyCode         String
+  valuationCurrencyCode String
+  qty                  Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  totalCostValuation   Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  updatedAt            DateTime @default(now()) @db.Timestamp(3)
+
+  @@id([tenantId, currencyCode, valuationCurrencyCode])
+  @@index([tenantId])
+  @@index([tenantId, currencyCode])
+  @@index([tenantId, valuationCurrencyCode])
+}
+
+model MspCustomer {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId         String
+  name            String
+  phone           String?
+  isActive        Boolean  @default(true)
+  note            String?
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
+  updatedAt       DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+  updatedByUserId String?
+  kycStatus       String   @default("none")
+  kycJson         Json?
+  kycUpdatedAt    DateTime? @db.Timestamp(3)
+  kycVerifiedAt   DateTime? @db.Timestamp(3)
+  kycVerifiedByUserId String?
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+  @@index([tenantId, name])
+  @@index([tenantId, kycStatus])
+}
+
+model MspBranch {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId         String
+  name            String
+  code            String?
+  address         String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
+  updatedAt       DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+  updatedByUserId String?
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+}
+
+model MspCashMovement {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId      String
+  direction     String
+  movementDate  DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  currencyCode  String
+  amount        Decimal  @db.Decimal(20, 6)
+  branchId      String?  @db.Uuid
+  note          String?
+  createdAt     DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+  accountId     String?  @db.Uuid
+
+  @@index([tenantId])
+  @@index([tenantId, movementDate])
+  @@index([tenantId, currencyCode])
+}
+
+model MspCashSession {
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId          String
+  accountId         String   @db.Uuid
+  currencyCode      String
+  status            String   @default("open")
+  openedAt          DateTime @default(now()) @db.Timestamp(3)
+  closedAt          DateTime? @db.Timestamp(3)
+  openedBookBalance Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  closedBookBalance Decimal? @db.Decimal(20, 6)
+  countedAmount     Decimal? @db.Decimal(20, 6)
+  variance          Decimal? @db.Decimal(20, 6)
+  denominationsJson Json?
+  note              String?
+  createdAt         DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId   String?
+  closedByUserId    String?
+
+  @@index([tenantId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, status])
+  @@index([tenantId, openedAt])
+}
+
+model MspBankStatement {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId        String
+  accountId       String   @db.Uuid
+  currencyCode    String
+  statementFrom   DateTime @db.Date
+  statementTo     DateTime @db.Date
+  openingBalance  Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  closingBalance  Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  status          String   @default("open")
+  lockedAt        DateTime? @db.Timestamp(3)
+  lockedByUserId  String?
+  note            String?
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+
+  @@index([tenantId])
+  @@index([tenantId, accountId])
+  @@index([tenantId, statementFrom, statementTo])
+}
+
+model MspBankStatementLine {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId    String
+  statementId String   @db.Uuid
+  rowIndex    Int      @default(0)
+  lineDate    DateTime @db.Date
+  description String?
+  reference   String?
+  amountSigned Decimal @db.Decimal(20, 6)
+  balance      Decimal? @db.Decimal(20, 6)
+  createdAt    DateTime @default(now()) @db.Timestamp(3)
+
+  @@index([tenantId])
+  @@index([tenantId, statementId])
+  @@index([tenantId, lineDate])
+  @@index([tenantId, amountSigned])
+}
+
+model MspBankStatementMatch {
+  tenantId        String
+  statementLineId String   @db.Uuid
+  ledgerEntryId   String   @db.Uuid
+  matchedAt       DateTime @default(now()) @db.Timestamp(3)
+  matchedByUserId String?
+
+  @@id([tenantId, statementLineId])
+  @@unique([tenantId, ledgerEntryId])
+  @@index([tenantId, statementLineId])
+  @@index([tenantId, ledgerEntryId])
+}
+
+model MspSettlement {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId        String
+  partnerId       String   @db.Uuid
+  direction       String
+  settlementDate  DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  currencyCode    String
+  amount          Decimal  @db.Decimal(20, 6)
+  note            String?
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+  accountId       String?  @db.Uuid
+
+  @@index([tenantId])
+  @@index([tenantId, settlementDate])
+  @@index([tenantId, partnerId])
+}
+
+model MspHawalaPartner {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId  String
+  name      String
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(3)
+  updatedAt DateTime @default(now()) @db.Timestamp(3)
+
+  @@index([tenantId])
+  @@index([tenantId, isActive])
+}
+
+model MspHawalaTransfer {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId      String
+  transferNumber Int
+  status        String   @default("open")
+  transferDate  DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  currencyCode  String
+  amount        Decimal  @db.Decimal(20, 6)
+  fee           Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  total         Decimal  @db.Decimal(20, 6)
+  senderName    String
+  senderPhone   String?
+  receiverName  String
+  receiverPhone String?
+  partnerId     String?  @db.Uuid
+  note          String?
+  createdAt     DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId String?
+  receiveAccountId String? @db.Uuid
+  customerId       String? @db.Uuid
+  fundingSource    String?
+
+  @@unique([tenantId, transferNumber])
+  @@index([tenantId, transferDate])
+  @@index([tenantId, status])
+}
+
+model MspHawalaPayout {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId     String
+  transferId   String   @db.Uuid
+  paidAmount   Decimal  @db.Decimal(20, 6)
+  paidAt       DateTime @default(now()) @db.Timestamp(3)
+  paidByUserId String?
+  note         String?
+  payAccountId String?  @db.Uuid
+
+  @@index([tenantId, transferId])
+}
+
+model MspAmlAlert {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId    String
+  createdAt   DateTime @default(now()) @db.Timestamp(3)
+  status      String   @default("open")
+  ruleCode    String
+  severity    String   @default("medium")
+  title       String
+  fingerprint String
+  sourceType  String
+  sourceId    String?  @db.Uuid
+  customerId  String?  @db.Uuid
+  currencyCode String?
+  amount      Decimal? @db.Decimal(20, 6)
+  detailsJson Json?
+  closedAt    DateTime? @db.Timestamp(3)
+  closedByUserId String?
+  closeNote   String?
+}
+
 model ShopCategory {
   id        String   @id @default(uuid())
   tenantId  String
