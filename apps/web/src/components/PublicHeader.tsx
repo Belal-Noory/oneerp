@@ -49,10 +49,7 @@ export function PublicHeader(props: { locale: Locale }) {
             </summary>
 
             <div
-              className={[
-                "absolute z-30 mt-3 w-[18rem] max-w-[85vw] rounded-2xl border border-gray-200 bg-white p-2 shadow-lg",
-                rtl ? "left-0" : "right-0"
-              ].join(" ")}
+              className="absolute right-0 z-30 mt-3 w-[18rem] max-w-[85vw] rounded-2xl border border-gray-200 bg-white p-2 shadow-lg"
             >
               <div className="space-y-1 p-1">
                 <Link className="block rounded-xl px-3 py-2 text-sm text-gray-800 hover:bg-gray-50" href="/">

@@ -57,10 +57,7 @@ export function LanguageSwitcher(props: { locale: Locale }) {
       {open ? (
         <div
           role="menu"
-          className={[
-            "absolute z-30 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg",
-            rtl ? "left-0" : "right-0"
-          ].join(" ")}
+          className="absolute right-0 z-30 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
         >
           {supportedLocales.map((l) => {
             const active = l === locale;
