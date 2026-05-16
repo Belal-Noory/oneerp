@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/auth-fetch";
 import { useClientI18n } from "@/lib/client-i18n";
 
 export default function OwnerLoginPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-md py-10" />}>
+      <OwnerLoginPageInner />
+    </Suspense>
+  );
+}
+
+function OwnerLoginPageInner() {
   const { t } = useClientI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
