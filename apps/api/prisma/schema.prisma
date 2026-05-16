@@ -684,9 +684,6 @@ model MspAccount {
   @@index([tenantId, customerId])
   @@index([tenantId, partnerId])
   @@index([tenantId, systemCode])
-  @@unique([tenantId, customerId, currencyCode])
-  @@unique([tenantId, partnerId, currencyCode])
-  @@unique([tenantId, systemCode, currencyCode])
 }
 
 model MspLedgerEntry {
@@ -756,7 +753,6 @@ model MspBranch {
   createdByUserId String?
   updatedByUserId String?
 
-  @@unique([tenantId, code])
   @@index([tenantId])
   @@index([tenantId, isActive])
 }
