@@ -1818,6 +1818,7 @@ const en: Translations = {
     "app.owner.nav.requests": "Requests",
     "app.owner.nav.tenants": "Tenants",
     "app.owner.nav.tutorials": "Tutorials",
+    "app.owner.nav.contactSubmissions": "Contact Messages",
     "app.owner.login.title": "Owner login",
     "app.owner.login.subtitle": "Sign in to manage tenants, module requests, and subscriptions.",
     "app.owner.tutorials.title": "Tutorials",

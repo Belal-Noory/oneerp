@@ -1159,6 +1159,95 @@ export class OwnerController {
     await prismaAny.tutorial.delete({ where: { id } });
     return { data: { success: true } };
   }
+
+  @Get("contact-submissions")
+  async ownerListContactSubmissions(
+    @Query()
+    query: {
+      q?: string;
+      page?: string;
+      pageSize?: string;
+    }
+  ) {
+    const prismaAny = this.prisma as unknown as {
+      publicContactSubmission?: {
+        count: (args: unknown) => Promise<number>;
+        findMany: (args: unknown) => Promise<unknown[]>;
+      };
+    };
+    if (!prismaAny.publicContactSubmission) return { data: [], meta: { page: 1, pageSize: 30, total: 0 } };
+
+    const q = (query.q ?? "").trim();
+    const page = Math.max(1, Number.parseInt(query.page ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number.parseInt(query.pageSize ?? "30", 10) || 30));
+    const skip = (page - 1) * pageSize;
+
+    const where: Record<string, unknown> = {};
+    if (q) {
+      where.OR = [
+        { fullName: { contains: q, mode: "insensitive" } },
+        { organizationName: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { phoneNumber: { contains: q, mode: "insensitive" } },
+        { serviceType: { contains: q, mode: "insensitive" } },
+        { message: { contains: q, mode: "insensitive" } }
+      ];
+    }
+
+    const [total, rows] = await Promise.all([
+      prismaAny.publicContactSubmission.count({ where }),
+      prismaAny.publicContactSubmission.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          fullName: true,
+          organizationName: true,
+          email: true,
+          phoneNumber: true,
+          serviceType: true,
+          message: true,
+          locale: true,
+          ip: true,
+          userAgent: true,
+          createdAt: true
+        }
+      })
+    ]);
+
+    const items = rows as Array<{
+      id: string;
+      fullName: string;
+      organizationName: string | null;
+      email: string;
+      phoneNumber: string;
+      serviceType: string;
+      message: string;
+      locale: string | null;
+      ip: string | null;
+      userAgent: string | null;
+      createdAt: Date;
+    }>;
+
+    return {
+      data: items.map((x) => ({
+        id: x.id,
+        full_name: x.fullName,
+        organization_name: x.organizationName ?? null,
+        email: x.email,
+        phone_number: x.phoneNumber,
+        service_type: x.serviceType,
+        message: x.message,
+        locale: x.locale ?? null,
+        ip: x.ip ?? null,
+        user_agent: x.userAgent ?? null,
+        created_at: x.createdAt
+      })),
+      meta: { page, pageSize, total }
+    };
+  }
 }
 
 function toSlug(value: string): string {

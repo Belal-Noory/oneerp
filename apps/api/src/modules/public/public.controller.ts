@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpException, Param, Post, Query, Req } from "@nestjs/common";
 import { randomUUID } from "crypto";
+import * as tls from "tls";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PublicContactDto, WaitlistDto } from "./dto/waitlist.dto";
 
@@ -145,6 +146,17 @@ export class PublicController {
     }
 
     await notifyContactWebhook({
+      fullName: body.fullName.trim(),
+      organizationName: body.organizationName?.trim() || null,
+      email,
+      phoneNumber: body.phoneNumber.trim(),
+      serviceType: body.serviceType,
+      message: body.message.trim(),
+      locale: body.locale ?? null,
+      ip,
+      userAgent
+    });
+    await notifyContactEmail({
       fullName: body.fullName.trim(),
       organizationName: body.organizationName?.trim() || null,
       email,
@@ -702,5 +714,172 @@ async function notifyContactWebhook(payload: {
   } catch {
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function notifyContactEmail(payload: {
+  fullName: string;
+  organizationName: string | null;
+  email: string;
+  phoneNumber: string;
+  serviceType: string;
+  message: string;
+  locale: string | null;
+  ip: string | null;
+  userAgent: string | null;
+}): Promise<void> {
+  const host = process.env.CONTACT_EMAIL_SMTP_HOST?.trim();
+  const port = Number.parseInt(process.env.CONTACT_EMAIL_SMTP_PORT?.trim() ?? "465", 10) || 465;
+  const user = process.env.CONTACT_EMAIL_USER?.trim();
+  const pass = process.env.CONTACT_EMAIL_PASS?.trim();
+  const to = (process.env.CONTACT_EMAIL_TO ?? "").trim();
+  if (!host || !user || !pass || !to) return;
+
+  const from = (process.env.CONTACT_EMAIL_FROM ?? user).trim();
+
+  const subject = `[ONEERP Contact] ${payload.serviceType} — ${payload.fullName}`;
+  const text = [
+    `Full Name: ${payload.fullName}`,
+    `Organization: ${payload.organizationName ?? ""}`,
+    `Email: ${payload.email}`,
+    `Phone: ${payload.phoneNumber}`,
+    `Service: ${payload.serviceType}`,
+    `Locale: ${payload.locale ?? ""}`,
+    `IP: ${payload.ip ?? ""}`,
+    `User-Agent: ${payload.userAgent ?? ""}`,
+    "",
+    "Message:",
+    payload.message
+  ].join("\n");
+
+  try {
+    await smtpSendMail({
+      host,
+      port,
+      user,
+      pass,
+      from,
+      to,
+      subject,
+      text
+    });
+  } catch {
+  }
+}
+
+async function smtpSendMail(args: {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<void> {
+  const socket = tls.connect({
+    host: args.host,
+    port: args.port,
+    servername: args.host,
+    timeout: 8000
+  });
+
+  const readReply = () =>
+    new Promise<{ code: number; lines: string[] }>((resolve, reject) => {
+      let buf = "";
+      const lines: string[] = [];
+      const onData = (chunk: Buffer) => {
+        buf += chunk.toString("utf8");
+        for (;;) {
+          const idx = buf.indexOf("\r\n");
+          if (idx < 0) break;
+          const line = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          lines.push(line);
+          if (line.length >= 4 && /^\d{3} /.test(line)) {
+            cleanup();
+            resolve({ code: Number.parseInt(line.slice(0, 3), 10), lines });
+            return;
+          }
+        }
+      };
+      const onError = (err: unknown) => {
+        cleanup();
+        reject(err);
+      };
+      const onTimeout = () => {
+        cleanup();
+        reject(new Error("SMTP_TIMEOUT"));
+      };
+      const cleanup = () => {
+        socket.off("data", onData);
+        socket.off("error", onError);
+        socket.off("timeout", onTimeout);
+      };
+      socket.on("data", onData);
+      socket.on("error", onError);
+      socket.on("timeout", onTimeout);
+    });
+
+  const send = (line: string) =>
+    new Promise<void>((resolve, reject) => {
+      socket.write(`${line}\r\n`, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+  const expect = async (okCodes: number[]) => {
+    const r = await readReply();
+    if (!okCodes.includes(r.code)) throw new Error(`SMTP_BAD_REPLY_${r.code}`);
+    return r;
+  };
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.once("secureConnect", () => resolve());
+      socket.once("error", (err) => reject(err));
+    });
+
+    await expect([220]);
+    await send(`EHLO oneerp`);
+    await expect([250]);
+
+    await send("AUTH LOGIN");
+    await expect([334]);
+    await send(Buffer.from(args.user, "utf8").toString("base64"));
+    await expect([334]);
+    await send(Buffer.from(args.pass, "utf8").toString("base64"));
+    await expect([235]);
+
+    await send(`MAIL FROM:<${args.from}>`);
+    await expect([250]);
+    await send(`RCPT TO:<${args.to}>`);
+    await expect([250, 251]);
+    await send("DATA");
+    await expect([354]);
+
+    const date = new Date().toUTCString();
+    const msg =
+      [
+        `From: ${args.from}`,
+        `To: ${args.to}`,
+        `Subject: ${args.subject}`,
+        `Date: ${date}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/plain; charset="utf-8"`,
+        `Content-Transfer-Encoding: 8bit`,
+        "",
+        args.text
+      ].join("\r\n") + "\r\n";
+
+    socket.write(msg.replace(/\r?\n/g, "\r\n"));
+    socket.write("\r\n.\r\n");
+    await expect([250]);
+
+    await send("QUIT");
+    await expect([221]);
+  } finally {
+    socket.end();
   }
 }

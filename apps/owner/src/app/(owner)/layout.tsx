@@ -26,6 +26,9 @@ export default async function OwnerLayout(props: { children: React.ReactNode }) 
               <Link className="text-gray-700 hover:text-gray-900" href="/tutorials">
                 {t("app.owner.nav.tutorials")}
               </Link>
+              <Link className="text-gray-700 hover:text-gray-900" href="/contact-submissions">
+                {t("app.owner.nav.contactSubmissions")}
+              </Link>
             </nav>
           </div>
           <OwnerUserMenu />
