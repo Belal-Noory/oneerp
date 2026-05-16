@@ -706,15 +706,17 @@ export class OwnerController {
     if (!prismaAny.tutorialCategory) return { data: [] };
 
     const items = (await prismaAny.tutorialCategory.findMany({
-      select: { id: true, slug: true, icon: true, titleEn: true, titleFa: true, titlePs: true, orderNo: true, isActive: true, createdAt: true, updatedAt: true },
+      select: { id: true, slug: true, icon: true, scope: true, moduleId: true, titleEn: true, titleFa: true, titlePs: true, orderNo: true, isActive: true, createdAt: true, updatedAt: true },
       orderBy: [{ orderNo: "asc" }, { createdAt: "asc" }]
-    })) as Array<{ id: string; slug: string; icon: string; titleEn: string; titleFa: string; titlePs: string; orderNo: number; isActive: boolean; createdAt: Date; updatedAt: Date }>;
+    })) as Array<{ id: string; slug: string; icon: string; scope: string; moduleId: string | null; titleEn: string; titleFa: string; titlePs: string; orderNo: number; isActive: boolean; createdAt: Date; updatedAt: Date }>;
 
     return {
       data: items.map((c) => ({
         id: c.id,
         slug: c.slug,
         icon: c.icon,
+        tutorial_scope: c.scope,
+        module_id: c.moduleId ?? null,
         title_en: c.titleEn,
         title_dr: c.titleFa,
         title_ps: c.titlePs,
@@ -731,11 +733,17 @@ export class OwnerController {
     const prismaAny = this.prisma as unknown as { tutorialCategory?: { create: (args: unknown) => Promise<unknown> } };
     if (!prismaAny.tutorialCategory) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
 
+    const scope = body.scope;
+    const moduleId = scope === "module" ? (body.moduleId ?? "").trim() : "";
+    if (scope === "module" && !moduleId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
     const slug = toSlug(body.slug);
     const created = (await prismaAny.tutorialCategory.create({
       data: {
         slug,
         icon: (body.icon ?? "").trim() || "layers",
+        scope,
+        moduleId: scope === "module" ? moduleId : null,
         titleEn: body.titleEn.trim(),
         titleFa: body.titleFa.trim(),
         titlePs: body.titlePs.trim(),
@@ -753,12 +761,18 @@ export class OwnerController {
     const prismaAny = this.prisma as unknown as { tutorialCategory?: { update: (args: unknown) => Promise<unknown> } };
     if (!prismaAny.tutorialCategory) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
 
+    const scope = body.scope;
+    const moduleId = scope === "module" ? (body.moduleId ?? "").trim() : "";
+    if (scope === "module" && !moduleId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
     const slug = toSlug(body.slug);
     await prismaAny.tutorialCategory.update({
       where: { id },
       data: {
         slug,
         icon: (body.icon ?? "").trim() || "layers",
+        scope,
+        moduleId: scope === "module" ? moduleId : null,
         titleEn: body.titleEn.trim(),
         titleFa: body.titleFa.trim(),
         titlePs: body.titlePs.trim(),
@@ -787,12 +801,16 @@ export class OwnerController {
       select: {
         id: true,
         slug: true,
+        scope: true,
+        moduleId: true,
+        categoryId: true,
         titleEn: true,
         titleFa: true,
         titlePs: true,
         descriptionEn: true,
         descriptionFa: true,
         descriptionPs: true,
+        thumbnailUrl: true,
         orderNo: true,
         isActive: true,
         createdAt: true,
@@ -805,12 +823,16 @@ export class OwnerController {
       data: items.map((s) => ({
         id: s.id,
         slug: s.slug,
+        tutorial_scope: s.scope,
+        module_id: s.moduleId ?? null,
+        category_id: s.categoryId ?? null,
         title_en: s.titleEn,
         title_dr: s.titleFa,
         title_ps: s.titlePs,
         description_en: s.descriptionEn ?? null,
         description_dr: s.descriptionFa ?? null,
         description_ps: s.descriptionPs ?? null,
+        thumbnail_url: s.thumbnailUrl ?? null,
         order_no: s.orderNo,
         is_active: s.isActive,
         created_at: s.createdAt,
@@ -824,16 +846,24 @@ export class OwnerController {
     const prismaAny = this.prisma as unknown as { tutorialSeries?: { create: (args: unknown) => Promise<unknown> } };
     if (!prismaAny.tutorialSeries) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
 
+    const scope = body.scope;
+    const moduleId = scope === "module" ? (body.moduleId ?? "").trim() : "";
+    if (scope === "module" && !moduleId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
     const slug = toSlug(body.slug);
     const created = (await prismaAny.tutorialSeries.create({
       data: {
         slug,
+        scope,
+        moduleId: scope === "module" ? moduleId : null,
+        categoryId: (body.categoryId ?? "").trim() || null,
         titleEn: body.titleEn.trim(),
         titleFa: body.titleFa.trim(),
         titlePs: body.titlePs.trim(),
         descriptionEn: body.descriptionEn?.trim() || null,
         descriptionFa: body.descriptionFa?.trim() || null,
         descriptionPs: body.descriptionPs?.trim() || null,
+        thumbnailUrl: body.thumbnailUrl?.trim() || null,
         orderNo: body.orderNo ?? 0,
         isActive: body.isActive ?? true
       },
@@ -848,17 +878,25 @@ export class OwnerController {
     const prismaAny = this.prisma as unknown as { tutorialSeries?: { update: (args: unknown) => Promise<unknown> } };
     if (!prismaAny.tutorialSeries) throw new HttpException({ error: { code: "INTERNAL_ERROR", message_key: "errors.internal" } }, 500);
 
+    const scope = body.scope;
+    const moduleId = scope === "module" ? (body.moduleId ?? "").trim() : "";
+    if (scope === "module" && !moduleId) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
     const slug = toSlug(body.slug);
     await prismaAny.tutorialSeries.update({
       where: { id },
       data: {
         slug,
+        scope,
+        moduleId: scope === "module" ? moduleId : null,
+        categoryId: (body.categoryId ?? "").trim() || null,
         titleEn: body.titleEn.trim(),
         titleFa: body.titleFa.trim(),
         titlePs: body.titlePs.trim(),
         descriptionEn: body.descriptionEn?.trim() || null,
         descriptionFa: body.descriptionFa?.trim() || null,
         descriptionPs: body.descriptionPs?.trim() || null,
+        thumbnailUrl: body.thumbnailUrl?.trim() || null,
         orderNo: body.orderNo ?? 0,
         isActive: body.isActive ?? true
       }
@@ -883,6 +921,7 @@ export class OwnerController {
       scope?: string;
       moduleId?: string;
       categoryId?: string;
+      seriesId?: string;
       difficulty?: string;
       language?: string;
       visibility?: string;
@@ -899,6 +938,7 @@ export class OwnerController {
     if ((query.scope ?? "").trim()) where.scope = query.scope?.trim();
     if ((query.moduleId ?? "").trim()) where.moduleId = query.moduleId?.trim();
     if ((query.categoryId ?? "").trim()) where.categoryId = query.categoryId?.trim();
+    if ((query.seriesId ?? "").trim()) where.seriesId = query.seriesId?.trim();
     if ((query.difficulty ?? "").trim()) where.difficulty = query.difficulty?.trim();
     if ((query.language ?? "").trim()) where.language = query.language?.trim();
     if ((query.visibility ?? "").trim()) where.visibility = query.visibility?.trim();
@@ -1016,7 +1056,7 @@ export class OwnerController {
         moduleId: scope === "module" ? moduleId : null,
         categoryId: (body.categoryId ?? "").trim() || null,
         seriesId: (body.seriesId ?? "").trim() || null,
-        stepNo: body.stepNo ?? null,
+        stepNo: (body.seriesId ?? "").trim() ? (body.stepNo ?? null) : null,
         orderNo: body.orderNo ?? 0,
         titleEn: body.titleEn.trim(),
         titleFa: body.titleFa.trim(),
@@ -1076,7 +1116,7 @@ export class OwnerController {
         moduleId: scope === "module" ? moduleId : null,
         categoryId: (body.categoryId ?? "").trim() || null,
         seriesId: (body.seriesId ?? "").trim() || null,
-        stepNo: body.stepNo ?? null,
+        stepNo: (body.seriesId ?? "").trim() ? (body.stepNo ?? null) : null,
         orderNo: body.orderNo ?? 0,
         titleEn: body.titleEn.trim(),
         titleFa: body.titleFa.trim(),

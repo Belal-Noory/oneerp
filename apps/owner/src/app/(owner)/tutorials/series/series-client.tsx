@@ -2,29 +2,53 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/auth-fetch";
-import { Modal } from "@/components/Modal";
 import { t as translate } from "@oneerp/i18n";
+import { Modal } from "@/components/Modal";
 
 type Series = {
   id: string;
   slug: string;
+  tutorial_scope: string;
+  module_id: string | null;
+  category_id: string | null;
   title_en: string;
   title_dr: string;
   title_ps: string;
   description_en: string | null;
   description_dr: string | null;
   description_ps: string | null;
+  thumbnail_url: string | null;
   order_no: number;
   is_active: boolean;
 };
 
-const emptyForm = { id: null as string | null, slug: "", titleEn: "", titleFa: "", titlePs: "", descriptionEn: "", descriptionFa: "", descriptionPs: "", orderNo: "0", isActive: true };
+type PublicModule = { id: string; name_key: string; description_key: string; category: string; icon: string; is_active: boolean };
+type Category = { id: string; slug: string; icon: string; tutorial_scope: string; module_id: string | null; title_en: string; title_dr: string; title_ps: string; order_no: number; is_active: boolean };
+
+const emptyForm = {
+  id: null as string | null,
+  slug: "",
+  scope: "general",
+  moduleId: "",
+  categoryId: "",
+  titleEn: "",
+  titleFa: "",
+  titlePs: "",
+  descriptionEn: "",
+  descriptionFa: "",
+  descriptionPs: "",
+  thumbnailUrl: "",
+  orderNo: "0",
+  isActive: true
+};
 
 export function OwnerTutorialSeriesClient() {
   const t = (key: string) => translate("en", key);
   const [loading, setLoading] = useState(true);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [items, setItems] = useState<Series[]>([]);
+  const [modules, setModules] = useState<PublicModule[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -34,11 +58,19 @@ export function OwnerTutorialSeriesClient() {
     setLoading(true);
     setErrorKey(null);
     try {
-      const res = await apiFetch("/api/owner/tutorial-series", { cache: "no-store" });
-      if (!res.ok) {
+      const [modsRes, catsRes, res] = await Promise.all([
+        apiFetch("/api/owner/modules", { cache: "no-store" }),
+        apiFetch("/api/owner/tutorial-categories", { cache: "no-store" }),
+        apiFetch("/api/owner/tutorial-series", { cache: "no-store" })
+      ]);
+      if (!modsRes.ok || !catsRes.ok || !res.ok) {
         setErrorKey("errors.internal");
         return;
       }
+      const modsJson = (await modsRes.json().catch(() => null)) as { data?: PublicModule[] } | null;
+      const catsJson = (await catsRes.json().catch(() => null)) as { data?: Category[] } | null;
+      setModules(Array.isArray(modsJson?.data) ? modsJson!.data : []);
+      setCategories(Array.isArray(catsJson?.data) ? catsJson!.data : []);
       const json = (await res.json()) as { data?: Series[] };
       setItems(Array.isArray(json.data) ? json.data : []);
     } catch {
@@ -61,12 +93,16 @@ export function OwnerTutorialSeriesClient() {
     setForm({
       id: s.id,
       slug: s.slug,
+      scope: s.tutorial_scope,
+      moduleId: s.module_id ?? "",
+      categoryId: s.category_id ?? "",
       titleEn: s.title_en,
       titleFa: s.title_dr,
       titlePs: s.title_ps,
       descriptionEn: s.description_en ?? "",
       descriptionFa: s.description_dr ?? "",
       descriptionPs: s.description_ps ?? "",
+      thumbnailUrl: s.thumbnail_url ?? "",
       orderNo: String(s.order_no ?? 0),
       isActive: s.is_active
     });
@@ -77,14 +113,23 @@ export function OwnerTutorialSeriesClient() {
     setSaving(true);
     setErrorKey(null);
     try {
+      const moduleId = form.scope === "module" ? form.moduleId.trim() : "";
+      if (form.scope === "module" && !moduleId) {
+        setErrorKey("errors.validationError");
+        return;
+      }
       const payload = {
         slug: form.slug,
+        scope: form.scope,
+        moduleId: form.scope === "module" ? moduleId : undefined,
+        categoryId: form.categoryId || undefined,
         titleEn: form.titleEn,
         titleFa: form.titleFa,
         titlePs: form.titlePs,
         descriptionEn: form.descriptionEn || undefined,
         descriptionFa: form.descriptionFa || undefined,
         descriptionPs: form.descriptionPs || undefined,
+        thumbnailUrl: form.thumbnailUrl || undefined,
         orderNo: Number(form.orderNo || 0),
         isActive: form.isActive
       };
@@ -175,6 +220,10 @@ export function OwnerTutorialSeriesClient() {
                     <td className="border-b border-gray-100 px-4 py-3">
                       <div className="font-semibold text-gray-900">{s.title_en}</div>
                       <div className="mt-1 text-xs text-gray-600">{s.title_dr} • {s.title_ps}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                        <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2">{t(`public.learning.scope.${s.tutorial_scope}`)}</span>
+                        {s.module_id ? <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2">{s.module_id}</span> : null}
+                      </div>
                     </td>
                     <td className="border-b border-gray-100 px-4 py-3 text-gray-700">{s.slug}</td>
                     <td className="border-b border-gray-100 px-4 py-3 text-gray-700 tabular">{s.order_no}</td>
@@ -216,6 +265,38 @@ export function OwnerTutorialSeriesClient() {
             <Field label={t("app.owner.tutorialSeries.form.orderNo")}>
               <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.orderNo} onChange={(e) => setForm((p) => ({ ...p, orderNo: e.target.value }))} inputMode="numeric" />
             </Field>
+            <Field label={t("app.owner.tutorials.form.scope")}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.scope}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    scope: e.target.value,
+                    moduleId: e.target.value === "module" ? p.moduleId : "",
+                    categoryId: ""
+                  }))
+                }
+              >
+                <option value="general">{t("public.learning.scope.general")}</option>
+                <option value="module">{t("public.learning.scope.module")}</option>
+              </select>
+            </Field>
+            <Field label={t("app.owner.tutorials.form.module")} hint={t("app.owner.tutorials.form.moduleHint")}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
+                value={form.moduleId}
+                onChange={(e) => setForm((p) => ({ ...p, moduleId: e.target.value, categoryId: "" }))}
+                disabled={form.scope !== "module"}
+              >
+                <option value="">{t("common.select")}</option>
+                {modules.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {t(m.name_key)}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label={t("app.owner.tutorialSeries.form.titleEn")}>
               <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.titleEn} onChange={(e) => setForm((p) => ({ ...p, titleEn: e.target.value }))} />
             </Field>
@@ -236,6 +317,36 @@ export function OwnerTutorialSeriesClient() {
             </Field>
             <Field label={t("app.owner.tutorialSeries.form.descriptionPs")}>
               <textarea className="min-h-24 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.descriptionPs} onChange={(e) => setForm((p) => ({ ...p, descriptionPs: e.target.value }))} />
+            </Field>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <Field label={t("app.owner.tutorials.form.category")}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.categoryId}
+                onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}
+              >
+                <option value="">{t("common.select")}</option>
+                {categories
+                  .filter((c) => {
+                    if (form.scope !== c.tutorial_scope) return false;
+                    if (form.scope === "module" && form.moduleId) return c.module_id === form.moduleId || c.module_id === null;
+                    return form.scope !== "module";
+                  })
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title_en}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <Field label={t("app.owner.tutorials.form.thumbnailUrl")}>
+              <input
+                className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.thumbnailUrl}
+                onChange={(e) => setForm((p) => ({ ...p, thumbnailUrl: e.target.value }))}
+              />
             </Field>
           </div>
 
@@ -260,10 +371,11 @@ export function OwnerTutorialSeriesClient() {
   );
 }
 
-function Field(props: { label: string; children: React.ReactNode }) {
+function Field(props: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-900">{props.label}</label>
+      {props.hint ? <div className="mt-1 text-xs text-gray-600">{props.hint}</div> : null}
       <div className="mt-1">{props.children}</div>
     </div>
   );

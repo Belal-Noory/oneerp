@@ -160,7 +160,13 @@ export class PublicController {
   }
 
   @Get("tutorial-categories")
-  async listTutorialCategories() {
+  async listTutorialCategories(
+    @Query()
+    query: {
+      scope?: string;
+      moduleId?: string;
+    }
+  ) {
     const prismaAny = this.prisma as unknown as {
       tutorialCategory?: { findMany: (args: unknown) => Promise<unknown[]> };
     };
@@ -168,21 +174,90 @@ export class PublicController {
       return { data: [] };
     }
 
+    const scope = (query.scope ?? "").trim();
+    const moduleId = (query.moduleId ?? "").trim();
+    const where: Record<string, unknown> = { isActive: true };
+    if (scope) where.scope = scope;
+    if (moduleId) where.OR = [{ moduleId }, { moduleId: null }];
+
     const items = (await prismaAny.tutorialCategory.findMany({
-      where: { isActive: true },
-      select: { id: true, slug: true, icon: true, titleEn: true, titleFa: true, titlePs: true, orderNo: true },
+      where,
+      select: { id: true, slug: true, icon: true, scope: true, moduleId: true, titleEn: true, titleFa: true, titlePs: true, orderNo: true },
       orderBy: [{ orderNo: "asc" }, { createdAt: "asc" }]
-    })) as Array<{ id: string; slug: string; icon: string; titleEn: string; titleFa: string; titlePs: string; orderNo: number }>;
+    })) as Array<{ id: string; slug: string; icon: string; scope: string; moduleId: string | null; titleEn: string; titleFa: string; titlePs: string; orderNo: number }>;
 
     return {
       data: items.map((c) => ({
         id: c.id,
         slug: c.slug,
         icon: c.icon,
+        tutorial_scope: c.scope,
+        module_id: c.moduleId ?? null,
         title_en: c.titleEn,
         title_dr: c.titleFa,
         title_ps: c.titlePs,
         order_no: c.orderNo
+      }))
+    };
+  }
+
+  @Get("tutorial-series")
+  async listTutorialSeries(
+    @Query()
+    query: {
+      scope?: string;
+      moduleId?: string;
+      categoryId?: string;
+    }
+  ) {
+    const prismaAny = this.prisma as unknown as {
+      tutorialSeries?: { findMany: (args: unknown) => Promise<unknown[]> };
+    };
+    if (!prismaAny.tutorialSeries) return { data: [] };
+
+    const scope = (query.scope ?? "").trim();
+    const moduleId = (query.moduleId ?? "").trim();
+    const categoryId = (query.categoryId ?? "").trim();
+    const where: Record<string, unknown> = { isActive: true };
+    if (scope) where.scope = scope;
+    if (moduleId) where.OR = [{ moduleId }, { moduleId: null }];
+    if (categoryId) where.categoryId = categoryId;
+
+    const items = (await prismaAny.tutorialSeries.findMany({
+      where,
+      select: {
+        id: true,
+        slug: true,
+        scope: true,
+        moduleId: true,
+        categoryId: true,
+        titleEn: true,
+        titleFa: true,
+        titlePs: true,
+        descriptionEn: true,
+        descriptionFa: true,
+        descriptionPs: true,
+        thumbnailUrl: true,
+        orderNo: true
+      },
+      orderBy: [{ orderNo: "asc" }, { createdAt: "asc" }]
+    })) as Array<any>;
+
+    return {
+      data: items.map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        tutorial_scope: s.scope,
+        module_id: s.moduleId ?? null,
+        category_id: s.categoryId ?? null,
+        title_en: s.titleEn,
+        title_dr: s.titleFa,
+        title_ps: s.titlePs,
+        description_en: s.descriptionEn ?? null,
+        description_dr: s.descriptionFa ?? null,
+        description_ps: s.descriptionPs ?? null,
+        thumbnail_url: s.thumbnailUrl ?? null,
+        order_no: s.orderNo
       }))
     };
   }
@@ -195,6 +270,7 @@ export class PublicController {
       scope?: string;
       moduleId?: string;
       categoryId?: string;
+      seriesId?: string;
       difficulty?: string;
       language?: string;
       featured?: string;
@@ -212,6 +288,7 @@ export class PublicController {
     const scope = (query.scope ?? "").trim();
     const moduleId = (query.moduleId ?? "").trim();
     const categoryId = (query.categoryId ?? "").trim();
+    const seriesId = (query.seriesId ?? "").trim();
     const difficulty = (query.difficulty ?? "").trim();
     const language = (query.language ?? "").trim();
     const featured = (query.featured ?? "").trim();
@@ -225,6 +302,7 @@ export class PublicController {
     if (scope) where.scope = scope;
     if (moduleId) where.moduleId = moduleId;
     if (categoryId) where.categoryId = categoryId;
+    if (seriesId) where.seriesId = seriesId;
     if (difficulty) where.difficulty = difficulty;
     if (language) where.language = language;
     if (featured) where.isFeatured = featured === "1";

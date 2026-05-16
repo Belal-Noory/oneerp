@@ -7,8 +7,8 @@ import { Modal } from "@/components/Modal";
 import { t as translate } from "@oneerp/i18n";
 
 type PublicModule = { id: string; name_key: string; description_key: string; category: string; icon: string; is_active: boolean };
-type Category = { id: string; slug: string; icon: string; title_en: string; title_dr: string; title_ps: string; is_active: boolean };
-type Series = { id: string; slug: string; title_en: string; title_dr: string; title_ps: string; is_active: boolean };
+type Category = { id: string; slug: string; icon: string; tutorial_scope: string; module_id: string | null; title_en: string; title_dr: string; title_ps: string; is_active: boolean };
+type Series = { id: string; slug: string; tutorial_scope: string; module_id: string | null; category_id: string | null; title_en: string; title_dr: string; title_ps: string; is_active: boolean; thumbnail_url: string | null };
 
 type Tutorial = {
   id: string;
@@ -68,6 +68,16 @@ const emptyForm = {
   relatedSlugs: ""
 };
 
+function toSlug(value: string): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+    .slice(0, 80);
+}
+
 export function OwnerTutorialsClient() {
   const t = (key: string) => translate("en", key);
 
@@ -92,6 +102,35 @@ export function OwnerTutorialsClient() {
   const moduleById = useMemo(() => new Map(modules.map((m) => [m.id, m])), [modules]);
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const seriesById = useMemo(() => new Map(series.map((s) => [s.id, s])), [series]);
+
+  const formCategories = useMemo(() => {
+    return categories
+      .filter((c) => {
+        if (!c.is_active) return false;
+        if (c.tutorial_scope !== form.scope) return false;
+        if (form.scope === "module") {
+          if (!form.moduleId) return true;
+          return c.module_id === form.moduleId || c.module_id === null;
+        }
+        return true;
+      })
+      .sort((a, b) => a.title_en.localeCompare(b.title_en));
+  }, [categories, form.moduleId, form.scope]);
+
+  const formSeries = useMemo(() => {
+    return series
+      .filter((s) => {
+        if (!s.is_active) return false;
+        if (s.tutorial_scope !== form.scope) return false;
+        if (form.scope === "module") {
+          if (!form.moduleId) return true;
+          if (!(s.module_id === form.moduleId || s.module_id === null)) return false;
+        }
+        if (form.categoryId) return s.category_id === form.categoryId;
+        return true;
+      })
+      .sort((a, b) => a.title_en.localeCompare(b.title_en));
+  }, [form.categoryId, form.moduleId, form.scope, series]);
 
   async function loadLookups() {
     const [modsRes, catRes, seriesRes] = await Promise.all([
@@ -189,7 +228,7 @@ export function OwnerTutorialsClient() {
         moduleId: form.scope === "module" ? (form.moduleId || undefined) : undefined,
         categoryId: form.categoryId || undefined,
         seriesId: form.seriesId || undefined,
-        stepNo: form.stepNo ? Number(form.stepNo) : undefined,
+        stepNo: form.seriesId && form.stepNo ? Number(form.stepNo) : undefined,
         orderNo: form.orderNo ? Number(form.orderNo) : undefined,
         titleEn: form.titleEn,
         titleFa: form.titleFa,
@@ -411,10 +450,27 @@ export function OwnerTutorialsClient() {
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <Field label={t("app.owner.tutorials.form.slug")}>
-              <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} />
+              <input
+                className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.slug}
+                onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))}
+              />
             </Field>
             <Field label={t("app.owner.tutorials.form.scope")}>
-              <select className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.scope} onChange={(e) => setForm((p) => ({ ...p, scope: e.target.value, moduleId: e.target.value === "module" ? p.moduleId : "" }))}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.scope}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    scope: e.target.value,
+                    moduleId: e.target.value === "module" ? p.moduleId : "",
+                    categoryId: "",
+                    seriesId: "",
+                    stepNo: ""
+                  }))
+                }
+              >
                 <option value="general">{t("public.learning.scope.general")}</option>
                 <option value="module">{t("public.learning.scope.module")}</option>
               </select>
@@ -423,7 +479,12 @@ export function OwnerTutorialsClient() {
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <Field label={t("app.owner.tutorials.form.module")} hint={t("app.owner.tutorials.form.moduleHint")}>
-              <select className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100 disabled:opacity-60" value={form.moduleId} onChange={(e) => setForm((p) => ({ ...p, moduleId: e.target.value }))} disabled={form.scope !== "module"}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
+                value={form.moduleId}
+                onChange={(e) => setForm((p) => ({ ...p, moduleId: e.target.value, categoryId: "", seriesId: "", stepNo: "" }))}
+                disabled={form.scope !== "module"}
+              >
                 <option value="">{t("common.select")}</option>
                 {modules.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -435,7 +496,7 @@ export function OwnerTutorialsClient() {
             <Field label={t("app.owner.tutorials.form.category")}>
               <select className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.categoryId} onChange={(e) => setForm((p) => ({ ...p, categoryId: e.target.value }))}>
                 <option value="">{t("common.select")}</option>
-                {categories.map((c) => (
+                {formCategories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.title_en}
                   </option>
@@ -446,18 +507,29 @@ export function OwnerTutorialsClient() {
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <Field label={t("app.owner.tutorials.form.series")}>
-              <select className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.seriesId} onChange={(e) => setForm((p) => ({ ...p, seriesId: e.target.value }))}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.seriesId}
+                onChange={(e) => setForm((p) => ({ ...p, seriesId: e.target.value, stepNo: e.target.value ? p.stepNo : "" }))}
+              >
                 <option value="">{t("common.select")}</option>
-                {series.map((s) => (
+                {formSeries.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.title_en}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label={t("app.owner.tutorials.form.stepNo")}>
-              <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.stepNo} onChange={(e) => setForm((p) => ({ ...p, stepNo: e.target.value }))} inputMode="numeric" />
-            </Field>
+            {form.seriesId ? (
+              <Field label={t("app.owner.tutorials.form.stepNo")}>
+                <input
+                  className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                  value={form.stepNo}
+                  onChange={(e) => setForm((p) => ({ ...p, stepNo: e.target.value }))}
+                  inputMode="numeric"
+                />
+              </Field>
+            ) : null}
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
@@ -486,7 +558,17 @@ export function OwnerTutorialsClient() {
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <Field label={t("app.owner.tutorials.form.titleEn")}>
-              <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.titleEn} onChange={(e) => setForm((p) => ({ ...p, titleEn: e.target.value }))} />
+              <input
+                className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.titleEn}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    titleEn: e.target.value,
+                    slug: p.slug ? p.slug : toSlug(e.target.value)
+                  }))
+                }
+              />
             </Field>
             <Field label={t("app.owner.tutorials.form.titleFa")}>
               <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.titleFa} onChange={(e) => setForm((p) => ({ ...p, titleFa: e.target.value }))} />

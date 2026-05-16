@@ -9,6 +9,8 @@ type Category = {
   id: string;
   slug: string;
   icon: string;
+  tutorial_scope: string;
+  module_id: string | null;
   title_en: string;
   title_dr: string;
   title_ps: string;
@@ -16,14 +18,27 @@ type Category = {
   is_active: boolean;
 };
 
-const emptyForm = { id: null as string | null, slug: "", icon: "layers", titleEn: "", titleFa: "", titlePs: "", orderNo: "0", isActive: true };
+type PublicModule = { id: string; name_key: string; description_key: string; category: string; icon: string; is_active: boolean };
 
+const emptyForm = {
+  id: null as string | null,
+  slug: "",
+  icon: "layers",
+  scope: "general",
+  moduleId: "",
+  titleEn: "",
+  titleFa: "",
+  titlePs: "",
+  orderNo: "0",
+  isActive: true
+};
 export function OwnerTutorialCategoriesClient() {
   const t = (key: string) => translate("en", key);
   const [loading, setLoading] = useState(true);
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [items, setItems] = useState<Category[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modules, setModules] = useState<PublicModule[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
@@ -32,12 +47,14 @@ export function OwnerTutorialCategoriesClient() {
     setLoading(true);
     setErrorKey(null);
     try {
-      const res = await apiFetch("/api/owner/tutorial-categories", { cache: "no-store" });
-      if (!res.ok) {
+      const [modsRes, res] = await Promise.all([apiFetch("/api/owner/modules", { cache: "no-store" }), apiFetch("/api/owner/tutorial-categories", { cache: "no-store" })]);
+      if (!modsRes.ok || !res.ok) {
         setErrorKey("errors.internal");
         return;
       }
       const json = (await res.json()) as { data?: Category[] };
+      const modsJson = (await modsRes.json().catch(() => null)) as { data?: PublicModule[] } | null;
+      setModules(Array.isArray(modsJson?.data) ? modsJson!.data : []);
       setItems(Array.isArray(json.data) ? json.data : []);
     } catch {
       setErrorKey("errors.internal");
@@ -45,6 +62,7 @@ export function OwnerTutorialCategoriesClient() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     void reload();
@@ -60,6 +78,8 @@ export function OwnerTutorialCategoriesClient() {
       id: c.id,
       slug: c.slug,
       icon: c.icon,
+      scope: c.tutorial_scope,
+      moduleId: c.module_id ?? "",
       titleEn: c.title_en,
       titleFa: c.title_dr,
       titlePs: c.title_ps,
@@ -73,9 +93,16 @@ export function OwnerTutorialCategoriesClient() {
     setSaving(true);
     setErrorKey(null);
     try {
+      const moduleId = form.scope === "module" ? form.moduleId.trim() : "";
+      if (form.scope === "module" && !moduleId) {
+        setErrorKey("errors.validationError");
+        return;
+      }
       const payload = {
         slug: form.slug,
         icon: form.icon,
+        scope: form.scope,
+        moduleId: form.scope === "module" ? moduleId : undefined,
         titleEn: form.titleEn,
         titleFa: form.titleFa,
         titlePs: form.titlePs,
@@ -169,6 +196,10 @@ export function OwnerTutorialCategoriesClient() {
                     <td className="border-b border-gray-100 px-4 py-3">
                       <div className="font-semibold text-gray-900">{c.title_en}</div>
                       <div className="mt-1 text-xs text-gray-600">{c.title_dr} • {c.title_ps}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                        <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2">{t(`public.learning.scope.${c.tutorial_scope}`)}</span>
+                        {c.module_id ? <span className="inline-flex h-6 items-center rounded-full bg-gray-100 px-2">{c.module_id}</span> : null}
+                      </div>
                     </td>
                     <td className="border-b border-gray-100 px-4 py-3 text-gray-700">{c.slug}</td>
                     <td className="border-b border-gray-100 px-4 py-3 text-gray-700 tabular">{c.order_no}</td>
@@ -209,6 +240,31 @@ export function OwnerTutorialCategoriesClient() {
             </Field>
             <Field label={t("app.owner.tutorialCategories.form.icon")}>
               <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.icon} onChange={(e) => setForm((p) => ({ ...p, icon: e.target.value }))} />
+            </Field>
+            <Field label={t("app.owner.tutorials.form.scope")}>
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+                value={form.scope}
+                onChange={(e) => setForm((p) => ({ ...p, scope: e.target.value, moduleId: e.target.value === "module" ? p.moduleId : "" }))}
+              >
+                <option value="general">{t("public.learning.scope.general")}</option>
+                <option value="module">{t("public.learning.scope.module")}</option>
+              </select>
+            </Field>
+            <Field label={t("app.owner.tutorials.form.module")} >
+              <select
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100 disabled:opacity-60"
+                value={form.moduleId}
+                onChange={(e) => setForm((p) => ({ ...p, moduleId: e.target.value }))}
+                disabled={form.scope !== "module"}
+              >
+                <option value="">{t("common.select")}</option>
+                {modules.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {t(m.name_key)}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label={t("app.owner.tutorialCategories.form.titleEn")}>
               <input className="h-11 w-full rounded-xl border border-gray-200 px-3 text-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100" value={form.titleEn} onChange={(e) => setForm((p) => ({ ...p, titleEn: e.target.value }))} />

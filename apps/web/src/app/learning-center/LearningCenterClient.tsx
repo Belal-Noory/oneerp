@@ -7,7 +7,8 @@ import { useClientI18n } from "@/lib/client-i18n";
 import { getApiBaseUrl } from "@/lib/api";
 import { Reveal } from "@/components/Reveal";
 
-type TutorialCategory = { id: string; slug: string; icon: string; title_en: string; title_dr: string; title_ps: string; order_no: number };
+type TutorialCategory = { id: string; slug: string; icon: string; tutorial_scope: string; module_id: string | null; title_en: string; title_dr: string; title_ps: string; order_no: number };
+type TutorialSeries = { id: string; slug: string; tutorial_scope: string; module_id: string | null; category_id: string | null; title_en: string; title_dr: string; title_ps: string; order_no: number };
 type PublicModule = { id: string; name_key: string; description_key: string; category: string; icon: string; is_active: boolean };
 
 type TutorialCard = {
@@ -72,12 +73,14 @@ export function LearningCenterClient() {
   const { t, locale } = useClientI18n();
   const searchParams = useSearchParams();
   const [categories, setCategories] = useState<TutorialCategory[]>([]);
+  const [series, setSeries] = useState<TutorialSeries[]>([]);
   const [modules, setModules] = useState<PublicModule[]>([]);
 
   const [q, setQ] = useState("");
   const [scope, setScope] = useState<"all" | "general" | "module">("all");
   const [moduleId, setModuleId] = useState<string>("all");
   const [categoryId, setCategoryId] = useState<string>("all");
+  const [seriesId, setSeriesId] = useState<string>("all");
   const [difficulty, setDifficulty] = useState<string>("all");
   const [language, setLanguage] = useState<string>("all");
   const [sort, setSort] = useState<"latest" | "mostViewed">("latest");
@@ -97,6 +100,8 @@ export function LearningCenterClient() {
     if (qParam) setQ(qParam);
     const catParam = (searchParams.get("categoryId") ?? "").trim();
     if (catParam) setCategoryId(catParam);
+    const seriesParam = (searchParams.get("seriesId") ?? "").trim();
+    if (seriesParam) setSeriesId(seriesParam);
     const diffParam = (searchParams.get("difficulty") ?? "").trim();
     if (diffParam) setDifficulty(diffParam);
     const langParam = (searchParams.get("language") ?? "").trim();
@@ -111,19 +116,15 @@ export function LearningCenterClient() {
     async function load() {
       try {
         const apiBase = getApiBaseUrl();
-        const [catRes, modRes] = await Promise.all([
-          fetch(joinUrl(apiBase, "/api/public/tutorial-categories"), { cache: "no-store" }),
-          fetch(joinUrl(apiBase, "/api/public/modules"), { cache: "no-store" })
-        ]);
-        const catJson = (await catRes.json().catch(() => null)) as { data?: TutorialCategory[] } | null;
+        const modRes = await fetch(joinUrl(apiBase, "/api/public/modules"), { cache: "no-store" });
         const modJson = (await modRes.json().catch(() => null)) as { data?: PublicModule[] } | null;
         if (!cancelled) {
-          setCategories(Array.isArray(catJson?.data) ? catJson!.data : []);
           setModules(Array.isArray(modJson?.data) ? modJson!.data : []);
         }
       } catch {
         if (!cancelled) {
           setCategories([]);
+          setSeries([]);
           setModules([]);
         }
       }
@@ -136,7 +137,61 @@ export function LearningCenterClient() {
 
   useEffect(() => {
     if (scope !== "module") setModuleId("all");
+    setCategoryId("all");
+    setSeriesId("all");
   }, [scope]);
+
+  useEffect(() => {
+    setCategoryId("all");
+    setSeriesId("all");
+  }, [moduleId]);
+
+  useEffect(() => {
+    setSeriesId("all");
+  }, [categoryId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const apiBase = getApiBaseUrl();
+        const params = new URLSearchParams();
+        if (scope !== "all") params.set("scope", scope);
+        if (scope === "module" && moduleId !== "all") params.set("moduleId", moduleId);
+        const res = await fetch(joinUrl(apiBase, `/api/public/tutorial-categories?${params.toString()}`), { cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as { data?: TutorialCategory[] } | null;
+        if (!cancelled) setCategories(Array.isArray(json?.data) ? json!.data : []);
+      } catch {
+        if (!cancelled) setCategories([]);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [moduleId, scope]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const apiBase = getApiBaseUrl();
+        const params = new URLSearchParams();
+        if (scope !== "all") params.set("scope", scope);
+        if (scope === "module" && moduleId !== "all") params.set("moduleId", moduleId);
+        if (categoryId !== "all") params.set("categoryId", categoryId);
+        const res = await fetch(joinUrl(apiBase, `/api/public/tutorial-series?${params.toString()}`), { cache: "no-store" });
+        const json = (await res.json().catch(() => null)) as { data?: TutorialSeries[] } | null;
+        if (!cancelled) setSeries(Array.isArray(json?.data) ? json!.data : []);
+      } catch {
+        if (!cancelled) setSeries([]);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryId, moduleId, scope]);
 
   const fetchPage = useCallback(
     async (page: number, mode: "replace" | "append") => {
@@ -146,6 +201,7 @@ export function LearningCenterClient() {
       if (scope !== "all") params.set("scope", scope);
       if (scope === "module" && moduleId !== "all") params.set("moduleId", moduleId);
       if (categoryId !== "all") params.set("categoryId", categoryId);
+      if (seriesId !== "all") params.set("seriesId", seriesId);
       if (difficulty !== "all") params.set("difficulty", difficulty);
       if (language !== "all") params.set("language", language);
       params.set("sort", sort);
@@ -159,7 +215,7 @@ export function LearningCenterClient() {
       setMeta(json.meta ?? { page, pageSize: meta.pageSize, total: next.length });
       setItems((prev) => (mode === "append" ? [...prev, ...next] : next));
     },
-    [categoryId, difficulty, language, meta.pageSize, moduleId, q, scope, sort]
+    [categoryId, difficulty, language, meta.pageSize, moduleId, q, scope, seriesId, sort]
   );
 
   useEffect(() => {
@@ -186,6 +242,8 @@ export function LearningCenterClient() {
   const categoryOptions = useMemo(() => [{ id: "all", label: t("public.learning.filter.allCategories") }, ...categories.map((c) => ({ id: c.id, label: pick(locale, c) }))], [categories, locale, t]);
 
   const moduleOptions = useMemo(() => [{ id: "all", label: t("public.learning.filter.allModules") }, ...modules.map((m) => ({ id: m.id, label: t(m.name_key) }))], [modules, t]);
+
+  const seriesOptions = useMemo(() => [{ id: "all", label: t("public.learning.filter.allSeries") }, ...series.map((s) => ({ id: s.id, label: pick(locale, s) }))], [locale, series, t]);
 
   return (
     <div className="space-y-10">
@@ -285,7 +343,21 @@ export function LearningCenterClient() {
               <option value="ps">{t("common.language.ps")}</option>
             </select>
           </div>
-          <div className="md:col-span-6 md:flex md:items-end md:justify-end">
+          <div className="md:col-span-3">
+            <label className="block text-sm font-medium text-gray-900">{t("public.learning.filter.series")}</label>
+            <select
+              className="mt-1 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-primary-200 focus:ring-2 focus:ring-primary-100"
+              value={seriesId}
+              onChange={(e) => setSeriesId(e.target.value)}
+            >
+              {seriesOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="md:col-span-3 md:flex md:items-end md:justify-end">
             <div className="mt-3 text-sm text-gray-600 md:mt-0">
               {t("public.learning.results")}: <span className="font-semibold text-gray-900 tabular">{meta.total}</span>
             </div>

@@ -308,6 +308,8 @@ model ModuleCatalog {
   membershipEnabledModules MembershipEnabledModule[]
   subscriptionItems        SubscriptionItem[]
   tutorials                Tutorial[]
+  tutorialCategories       TutorialCategory[]
+  tutorialSeries           TutorialSeries[]
 }
 
 model TenantEnabledModule {
@@ -499,6 +501,8 @@ model TutorialCategory {
   id        String   @id @default(uuid())
   slug      String   @unique
   icon      String
+  scope     String
+  moduleId  String?
   titleEn   String
   titleFa   String
   titlePs   String
@@ -507,28 +511,36 @@ model TutorialCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  module    ModuleCatalog? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   tutorials Tutorial[]
+  series    TutorialSeries[]
 
-  @@index([isActive, orderNo])
+  @@index([scope, moduleId, isActive, orderNo])
 }
 
 model TutorialSeries {
   id            String   @id @default(uuid())
   slug          String   @unique
+  scope         String
+  moduleId      String?
+  categoryId    String?
   titleEn       String
   titleFa       String
   titlePs       String
   descriptionEn String?
   descriptionFa String?
   descriptionPs String?
+  thumbnailUrl  String?
   orderNo       Int      @default(0)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  module    ModuleCatalog?    @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  category  TutorialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   tutorials Tutorial[]
 
-  @@index([isActive, orderNo])
+  @@index([scope, moduleId, categoryId, isActive, orderNo])
 }
 
 model Tutorial {

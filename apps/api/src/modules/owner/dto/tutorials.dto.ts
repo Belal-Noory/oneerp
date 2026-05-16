@@ -11,6 +11,14 @@ export class UpsertTutorialCategoryDto {
   @MaxLength(40)
   icon!: string;
 
+  @IsIn(["general", "module"])
+  scope!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  moduleId?: string;
+
   @IsString()
   @MinLength(2)
   @MaxLength(140)
@@ -42,6 +50,19 @@ export class UpsertTutorialSeriesDto {
   @MaxLength(80)
   slug!: string;
 
+  @IsIn(["general", "module"])
+  scope!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  moduleId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  categoryId?: string;
+
   @IsString()
   @MinLength(2)
   @MaxLength(140)
@@ -71,6 +92,11 @@ export class UpsertTutorialSeriesDto {
   @IsString()
   @MaxLength(500)
   descriptionPs?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  thumbnailUrl?: string;
 
   @IsOptional()
   @IsInt()
@@ -188,4 +214,3 @@ export class UpsertTutorialDto {
   @IsString({ each: true })
   relatedSlugs?: string[];
 }
-
