@@ -78,6 +78,68 @@ enum ShopCashSessionEventType {
   cash_out
 }
 
+enum ReferralStatus {
+  pending
+  awaiting_payment_confirmation
+  payment_received
+  activated
+  reward_granted
+  rejected
+}
+
+enum ReferralRewardType {
+  invoice_discount_10
+  free_month
+  premium_partner
+  loyalty_extra_5
+}
+
+enum ActivationRequestStatus {
+  pending
+  payment_received
+  activated
+  rejected
+}
+
+enum SupportTicketType {
+  issue_report
+  support_request
+  feature_suggestion
+  billing
+  other
+}
+
+enum SupportTicketStatus {
+  open
+  in_progress
+  waiting_for_client
+  resolved
+  closed
+  under_review
+  planned
+  in_development
+  completed
+  rejected
+}
+
+enum SupportTicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum SupportSenderType {
+  tenant
+  owner
+}
+
+enum SupportNotificationType {
+  new_ticket
+  new_message
+  status_changed
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String?  @unique
@@ -107,6 +169,21 @@ model User {
   fuelShiftsClosed     FuelShift[]   @relation("FuelShiftClosedBy")
   fuelTankDipsRecorded FuelTankDip[] @relation("FuelTankDipRecordedBy")
   fuelPriceUpdates     FuelPrice[]   @relation("FuelPriceUpdatedBy")
+
+  referralCodes                 ReferralCode[]
+  referralsAsReferrerUser       Referral[]                  @relation("ReferralsAsReferrerUser")
+  referralsAsReferredUser       Referral[]                  @relation("ReferralsAsReferredUser")
+  referralRewardsGrantedBy      ReferralRewardGrant[]       @relation("ReferralRewardGrantedBy")
+  partnerPremiumGrantedTenants  TenantPartnerProfile[]      @relation("TenantPartnerPremiumGrantedBy")
+  partnerBetaEnabledTenants     TenantPartnerProfile[]      @relation("TenantPartnerBetaEnabledBy")
+  activationRequestsConfirmedBy ActivationRequestTracking[] @relation("ActivationRequestConfirmedBy")
+  partnerFeedbacks              PartnerFeedback[]
+
+  supportTicketsCreated       SupportTicket[]       @relation("SupportTicketCreatedBy")
+  supportTicketsAssigned      SupportTicket[]       @relation("SupportTicketAssignedTo")
+  supportMessages             SupportMessage[]      @relation("SupportMessageSender")
+  supportAttachmentsUploaded  SupportAttachment[]   @relation("SupportAttachmentUploader")
+  supportNotificationsReceived SupportNotification[] @relation("SupportNotificationRecipientUser")
 }
 
 model Tenant {
@@ -169,28 +246,128 @@ model Tenant {
   fuelTankDips            FuelTankDip[]
   fuelPrices              FuelPrice[]
 
-  printPressCustomers       PrintPressCustomer[]
-  printPressJobs            PrintPressJob[]
-  printPressQuotations      PrintPressQuotation[]
-  printPressQuotationLines  PrintPressQuotationLine[]
-  printPressInvoices        PrintPressInvoice[]
-  printPressInvoiceLines    PrintPressInvoiceLine[]
-  printPressInvoicePayments PrintPressInvoicePayment[]
-  printPressExpenses        PrintPressExpense[]
-  printPressIncome          PrintPressIncome[]
-  printPressSettings        PrintPressSettings?
+  printPressCustomers           PrintPressCustomer[]
+  printPressJobs                PrintPressJob[]
+  printPressQuotations          PrintPressQuotation[]
+  printPressQuotationLines      PrintPressQuotationLine[]
+  printPressInvoices            PrintPressInvoice[]
+  printPressInvoiceLines        PrintPressInvoiceLine[]
+  printPressInvoicePayments     PrintPressInvoicePayment[]
+  printPressExpenses            PrintPressExpense[]
+  printPressIncome              PrintPressIncome[]
+  printPressSettings            PrintPressSettings?
   printPressCustomerAttachments PrintPressCustomerAttachment[]
   printPressExpenseAttachments  PrintPressExpenseAttachment[]
-  printPressRecurringExpenses  PrintPressRecurringExpense[]
-  printPressSuppliers          PrintPressSupplier[]
+  printPressRecurringExpenses   PrintPressRecurringExpense[]
+  printPressSuppliers           PrintPressSupplier[]
+
+  referralCodes             ReferralCode[]
+  referralsAsReferrerTenant Referral[]                  @relation("ReferralsAsReferrerTenant")
+  referralsAsReferredTenant Referral[]                  @relation("ReferralsAsReferredTenant")
+  referralRewardGrants      ReferralRewardGrant[]
+  partnerProfile            TenantPartnerProfile?
+  partnerFeedback           PartnerFeedback[]
+  activationRequests        ActivationRequestTracking[]
+
+  supportTickets       SupportTicket[]
+  supportNotifications SupportNotification[]
+}
+
+model SupportTicket {
+  id              String               @id @default(uuid())
+  tenantId        String
+  createdByUserId String
+  type            SupportTicketType
+  subject         String
+  description     String
+  status          SupportTicketStatus  @default(open)
+  priority        SupportTicketPriority @default(normal)
+  assignedToUserId String?
+  lastMessageAt   DateTime?
+  lastMessageText String?
+  lastSenderType  SupportSenderType?
+  unreadForTenant Int                  @default(0)
+  unreadForOwner  Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy  User   @relation("SupportTicketCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignedTo User?  @relation("SupportTicketAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  messages       SupportMessage[]
+  attachments    SupportAttachment[]
+  notifications  SupportNotification[]
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, status, updatedAt(sort: Desc)])
+  @@index([status, priority, updatedAt(sort: Desc)])
+  @@index([assignedToUserId, updatedAt(sort: Desc)])
+}
+
+model SupportMessage {
+  id             String          @id @default(uuid())
+  ticketId       String
+  senderType     SupportSenderType
+  senderUserId   String
+  message        String
+  seenByTenantAt DateTime?
+  seenByOwnerAt  DateTime?
+  createdAt      DateTime        @default(now())
+
+  ticket  SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender  User          @relation("SupportMessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  attachments SupportAttachment[]
+
+  @@index([ticketId, createdAt(sort: Asc)])
+  @@index([senderUserId, createdAt(sort: Desc)])
+}
+
+model SupportAttachment {
+  id           String          @id @default(uuid())
+  ticketId     String
+  messageId    String?
+  uploaderType SupportSenderType
+  uploaderUserId String
+  originalName String
+  contentType  String
+  sizeBytes    Int
+  storageKey   String
+  createdAt    DateTime        @default(now())
+
+  ticket   SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message  SupportMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  uploader User           @relation("SupportAttachmentUploader", fields: [uploaderUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt(sort: Desc)])
+  @@index([messageId])
+}
+
+model SupportNotification {
+  id              String                @id @default(uuid())
+  ticketId        String
+  tenantId        String
+  recipientType   SupportSenderType
+  recipientUserId String?
+  type            SupportNotificationType
+  isRead          Boolean               @default(false)
+  createdAt       DateTime              @default(now())
+  readAt          DateTime?
+
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipientUser User?         @relation("SupportNotificationRecipientUser", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, recipientUserId, isRead, createdAt(sort: Desc)])
+  @@index([ticketId, createdAt(sort: Desc)])
 }
 
 model FuelPrice {
-  id           String   @id @default(uuid())
-  tenantId     String
-  fuelType     String
-  pricePerUnit Decimal  @db.Decimal(14, 2)
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(uuid())
+  tenantId        String
+  fuelType        String
+  pricePerUnit    Decimal  @db.Decimal(14, 2)
+  updatedAt       DateTime @updatedAt
   updatedByUserId String?
 
   tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -396,8 +573,10 @@ model SubscriptionItem {
   endedAt              DateTime?
   subscriptionType     String?
   billingCycle         String?
+  listPriceAmount      Decimal?  @db.Decimal(14, 2)
   priceAmount          Decimal?  @db.Decimal(14, 2)
   priceCurrency        String?   @default("USD")
+  discountPercent      Int?
   currentPeriodStartAt DateTime?
   currentPeriodEndAt   DateTime?
   graceEndsAt          DateTime?
@@ -406,10 +585,11 @@ model SubscriptionItem {
   approvedByUserId     String?
   supportEndsAt        DateTime?
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  subscription Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  module       ModuleCatalog @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  approvedBy   User?         @relation("SubscriptionItemApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  tenant                    Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription              Subscription               @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  module                    ModuleCatalog              @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  approvedBy                User?                      @relation("SubscriptionItemApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  activationRequestTracking ActivationRequestTracking?
 
   @@unique([tenantId, subscriptionId, moduleId])
   @@index([tenantId, status])
@@ -443,10 +623,10 @@ model File {
   storageKey      String
   createdAt       DateTime @default(now())
 
-  tenant                   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  usedAsLogoBy             TenantBranding? @relation("TenantLogoFile")
-  usedAsShopProductImageBy ShopProduct[]   @relation("ShopProductImageFile")
-  usedAsPrintPressLogoBy   PrintPressSettings? @relation("PrintPressLogoFile")
+  tenant                        Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  usedAsLogoBy                  TenantBranding?                @relation("TenantLogoFile")
+  usedAsShopProductImageBy      ShopProduct[]                  @relation("ShopProductImageFile")
+  usedAsPrintPressLogoBy        PrintPressSettings?            @relation("PrintPressLogoFile")
   printPressCustomerAttachments PrintPressCustomerAttachment[]
   printPressExpenseAttachments  PrintPressExpenseAttachment[]
 
@@ -529,7 +709,7 @@ model TutorialCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  module    ModuleCatalog? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  module    ModuleCatalog?   @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   tutorials Tutorial[]
   series    TutorialSeries[]
 
@@ -606,11 +786,11 @@ model Tutorial {
 }
 
 model TutorialRelation {
-  id               String   @id @default(uuid())
-  tutorialId       String
+  id                String   @id @default(uuid())
+  tutorialId        String
   relatedTutorialId String
-  orderNo          Int      @default(0)
-  createdAt        DateTime @default(now())
+  orderNo           Int      @default(0)
+  createdAt         DateTime @default(now())
 
   tutorial        Tutorial @relation("TutorialRelationFrom", fields: [tutorialId], references: [id], onDelete: Cascade)
   relatedTutorial Tutorial @relation("TutorialRelationTo", fields: [relatedTutorialId], references: [id], onDelete: Cascade)
@@ -663,27 +843,27 @@ enum PrintPressRecurrenceInterval {
 }
 
 model PrintPressCustomer {
-  id          String   @id @default(uuid())
-  tenantId    String
-  moduleId    String   @default("printpress")
-  fullName    String
-  companyName String?
+  id           String                  @id @default(uuid())
+  tenantId     String
+  moduleId     String                  @default("printpress")
+  fullName     String
+  companyName  String?
   customerType PrintPressCustomerType?
-  phone       String?
-  email       String?
-  address     String?
-  taxNumber   String?
-  notes       String?
-  isActive    Boolean  @default(true)
-  deletedAt   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  phone        String?
+  email        String?
+  address      String?
+  taxNumber    String?
+  notes        String?
+  isActive     Boolean                 @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
 
-  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   attachments PrintPressCustomerAttachment[]
-  jobs       PrintPressJob[]
-  quotations PrintPressQuotation[]
-  invoices   PrintPressInvoice[]
+  jobs        PrintPressJob[]
+  quotations  PrintPressQuotation[]
+  invoices    PrintPressInvoice[]
 
   @@index([tenantId, moduleId, deletedAt])
   @@index([tenantId, moduleId, fullName])
@@ -697,32 +877,32 @@ model PrintPressCustomerAttachment {
   fileId     String
   createdAt  DateTime @default(now())
 
-  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer PrintPressCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  file     File             @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  file     File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, customerId, fileId])
   @@index([tenantId, customerId, createdAt(sort: Desc)])
 }
 
 model PrintPressJob {
-  id           String               @id @default(uuid())
-  tenantId     String
-  moduleId     String               @default("printpress")
-  jobNumber    String?
-  status       PrintPressJobStatus  @default(received)
-  priority     PrintPressJobPriority @default(normal)
-  customerId   String?
-  title        String?
-  description  String?
-  orderDate    DateTime             @default(now())
-  deliveryDate DateTime?
-  estimatedCost Decimal             @default(0) @db.Decimal(14, 2)
-  sellingPrice Decimal              @default(0) @db.Decimal(14, 2)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id            String                @id @default(uuid())
+  tenantId      String
+  moduleId      String                @default("printpress")
+  jobNumber     String?
+  status        PrintPressJobStatus   @default(received)
+  priority      PrintPressJobPriority @default(normal)
+  customerId    String?
+  title         String?
+  description   String?
+  orderDate     DateTime              @default(now())
+  deliveryDate  DateTime?
+  estimatedCost Decimal               @default(0) @db.Decimal(14, 2)
+  sellingPrice  Decimal               @default(0) @db.Decimal(14, 2)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
 
-  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   customer PrintPressCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, jobNumber])
@@ -732,24 +912,24 @@ model PrintPressJob {
 }
 
 model PrintPressQuotation {
-  id              String                @id @default(uuid())
+  id              String                    @id @default(uuid())
   tenantId        String
-  moduleId        String                @default("printpress")
+  moduleId        String                    @default("printpress")
   status          PrintPressQuotationStatus @default(draft)
   quotationNumber String?
   customerId      String?
-  currencyCode    String                @default("USD")
-  subtotal        Decimal               @default(0) @db.Decimal(14, 2)
-  discount        Decimal               @default(0) @db.Decimal(14, 2)
-  tax             Decimal               @default(0) @db.Decimal(14, 2)
-  total           Decimal               @default(0) @db.Decimal(14, 2)
+  currencyCode    String                    @default("USD")
+  subtotal        Decimal                   @default(0) @db.Decimal(14, 2)
+  discount        Decimal                   @default(0) @db.Decimal(14, 2)
+  tax             Decimal                   @default(0) @db.Decimal(14, 2)
+  total           Decimal                   @default(0) @db.Decimal(14, 2)
   notes           String?
   issuedAt        DateTime?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
-  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customer PrintPressCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  tenant   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer PrintPressCustomer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
   lines    PrintPressQuotationLine[]
   invoices PrintPressInvoice[]
 
@@ -767,35 +947,35 @@ model PrintPressQuotationLine {
   unitPrice   Decimal @db.Decimal(14, 2)
   lineTotal   Decimal @db.Decimal(14, 2)
 
-  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   quotation PrintPressQuotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, quotationId])
 }
 
 model PrintPressInvoice {
-  id            String              @id @default(uuid())
+  id            String                  @id @default(uuid())
   tenantId      String
-  moduleId      String              @default("printpress")
+  moduleId      String                  @default("printpress")
   status        PrintPressInvoiceStatus @default(draft)
   invoiceNumber String?
   quotationId   String?
   customerId    String?
-  currencyCode  String              @default("USD")
-  subtotal      Decimal             @default(0) @db.Decimal(14, 2)
-  discount      Decimal             @default(0) @db.Decimal(14, 2)
-  tax           Decimal             @default(0) @db.Decimal(14, 2)
-  total         Decimal             @default(0) @db.Decimal(14, 2)
-  paidTotal     Decimal             @default(0) @db.Decimal(14, 2)
+  currencyCode  String                  @default("USD")
+  subtotal      Decimal                 @default(0) @db.Decimal(14, 2)
+  discount      Decimal                 @default(0) @db.Decimal(14, 2)
+  tax           Decimal                 @default(0) @db.Decimal(14, 2)
+  total         Decimal                 @default(0) @db.Decimal(14, 2)
+  paidTotal     Decimal                 @default(0) @db.Decimal(14, 2)
   notes         String?
   issuedAt      DateTime?
   dueAt         DateTime?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
 
-  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  quotation PrintPressQuotation? @relation(fields: [quotationId], references: [id], onDelete: SetNull)
-  customer  PrintPressCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  tenant    Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  quotation PrintPressQuotation?       @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  customer  PrintPressCustomer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   lines     PrintPressInvoiceLine[]
   payments  PrintPressInvoicePayment[]
 
@@ -813,7 +993,7 @@ model PrintPressInvoiceLine {
   unitPrice   Decimal @db.Decimal(14, 2)
   lineTotal   Decimal @db.Decimal(14, 2)
 
-  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoice PrintPressInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, invoiceId])
@@ -828,7 +1008,7 @@ model PrintPressInvoicePayment {
   note      String?
   createdAt DateTime @default(now())
 
-  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoice PrintPressInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, invoiceId, createdAt(sort: Desc)])
@@ -846,8 +1026,8 @@ model PrintPressExpense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  supplier PrintPressSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  tenant      Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier    PrintPressSupplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   attachments PrintPressExpenseAttachment[]
 
   @@index([tenantId, moduleId, expenseDate(sort: Desc)])
@@ -861,29 +1041,29 @@ model PrintPressExpenseAttachment {
   fileId    String
   createdAt DateTime @default(now())
 
-  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   expense PrintPressExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  file    File            @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  file    File              @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, expenseId, fileId])
   @@index([tenantId, expenseId, createdAt(sort: Desc)])
 }
 
 model PrintPressRecurringExpense {
-  id          String   @id @default(uuid())
+  id          String                       @id @default(uuid())
   tenantId    String
-  moduleId    String   @default("printpress")
-  isActive    Boolean  @default(true)
+  moduleId    String                       @default("printpress")
+  isActive    Boolean                      @default(true)
   nextRunAt   DateTime
   interval    PrintPressRecurrenceInterval
   supplierId  String?
   category    String
   description String?
-  amount      Decimal  @db.Decimal(14, 2)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  amount      Decimal                      @db.Decimal(14, 2)
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant   Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   supplier PrintPressSupplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, moduleId, isActive, nextRunAt])
@@ -891,34 +1071,34 @@ model PrintPressRecurringExpense {
 }
 
 model PrintPressSupplier {
-  id          String   @id @default(uuid())
-  tenantId    String
-  moduleId    String   @default("printpress")
-  name        String
-  phone       String?
-  email       String?
-  address     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  tenantId  String
+  moduleId  String   @default("printpress")
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant             Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   printPressExpenses PrintPressExpense[]
-  recurringExpenses PrintPressRecurringExpense[]
+  recurringExpenses  PrintPressRecurringExpense[]
 
   @@unique([tenantId, moduleId, name])
   @@index([tenantId, moduleId, createdAt(sort: Desc)])
 }
 
 model PrintPressIncome {
-  id         String   @id @default(uuid())
-  tenantId   String
-  moduleId   String   @default("printpress")
-  incomeDate DateTime @default(now())
-  category   String
+  id          String   @id @default(uuid())
+  tenantId    String
+  moduleId    String   @default("printpress")
+  incomeDate  DateTime @default(now())
+  category    String
   description String?
-  amount     Decimal  @db.Decimal(14, 2)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  amount      Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -926,20 +1106,20 @@ model PrintPressIncome {
 }
 
 model PrintPressSettings {
-  tenantId             String   @id
-  moduleId             String   @default("printpress")
-  businessName         String?
-  logoFileId           String?  @unique
-  phone                String?
-  address              String?
-  email                String?
-  taxNumber            String?
-  defaultCurrencyCode  String   @default("USD")
-  nextJobNumber        Int      @default(1)
-  nextQuotationNumber  Int      @default(1)
-  nextInvoiceNumber    Int      @default(1)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  tenantId            String   @id
+  moduleId            String   @default("printpress")
+  businessName        String?
+  logoFileId          String?  @unique
+  phone               String?
+  address             String?
+  email               String?
+  taxNumber           String?
+  defaultCurrencyCode String   @default("USD")
+  nextJobNumber       Int      @default(1)
+  nextQuotationNumber Int      @default(1)
+  nextInvoiceNumber   Int      @default(1)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   logo   File?  @relation("PrintPressLogoFile", fields: [logoFileId], references: [id], onDelete: SetNull)
@@ -972,14 +1152,14 @@ model MspCurrency {
 }
 
 model MspExchangeRate {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId       String
-  baseCode       String
-  quoteCode      String
-  effectiveDate  DateTime @db.Date
-  buyRate        Decimal  @db.Decimal(20, 6)
-  sellRate       Decimal  @db.Decimal(20, 6)
-  updatedAt      DateTime @default(now()) @db.Timestamp(3)
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId        String
+  baseCode        String
+  quoteCode       String
+  effectiveDate   DateTime @db.Date
+  buyRate         Decimal  @db.Decimal(20, 6)
+  sellRate        Decimal  @db.Decimal(20, 6)
+  updatedAt       DateTime @default(now()) @db.Timestamp(3)
   updatedByUserId String?
 
   @@unique([tenantId, baseCode, quoteCode, effectiveDate])
@@ -988,26 +1168,26 @@ model MspExchangeRate {
 }
 
 model MspExchangeTicket {
-  id                     String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId               String
-  ticketNumber           Int
-  type                   String
-  baseCode               String
-  quoteCode              String
-  effectiveDate          DateTime @db.Date
-  quoteAmount            Decimal  @db.Decimal(20, 6)
-  rate                   Decimal  @db.Decimal(20, 6)
-  baseAmount             Decimal  @db.Decimal(20, 6)
-  feeBase                Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  customerName           String?
-  customerPhone          String?
-  note                   String?
-  createdAt              DateTime @default(now()) @db.Timestamp(3)
-  createdByUserId        String?
-  baseAccountId          String?  @db.Uuid
-  quoteAccountId         String?  @db.Uuid
-  customerId             String?  @db.Uuid
-  valuationCurrencyCode  String?
+  id                      String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId                String
+  ticketNumber            Int
+  type                    String
+  baseCode                String
+  quoteCode               String
+  effectiveDate           DateTime @db.Date
+  quoteAmount             Decimal  @db.Decimal(20, 6)
+  rate                    Decimal  @db.Decimal(20, 6)
+  baseAmount              Decimal  @db.Decimal(20, 6)
+  feeBase                 Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  customerName            String?
+  customerPhone           String?
+  note                    String?
+  createdAt               DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId         String?
+  baseAccountId           String?  @db.Uuid
+  quoteAccountId          String?  @db.Uuid
+  customerId              String?  @db.Uuid
+  valuationCurrencyCode   String?
   realizedProfitValuation Decimal? @db.Decimal(20, 6)
   costOfSoldValuation     Decimal? @db.Decimal(20, 6)
 
@@ -1020,20 +1200,20 @@ model MspExchangeTicket {
 }
 
 model MspAccount {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId      String
-  type          String
-  name          String
-  currencyCode  String
-  branchId      String?  @db.Uuid
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now()) @db.Timestamp(3)
-  updatedAt     DateTime @default(now()) @db.Timestamp(3)
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId        String
+  type            String
+  name            String
+  currencyCode    String
+  branchId        String?  @db.Uuid
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
+  updatedAt       DateTime @default(now()) @db.Timestamp(3)
   createdByUserId String?
   updatedByUserId String?
-  customerId    String?  @db.Uuid
-  partnerId     String?  @db.Uuid
-  systemCode    String?
+  customerId      String?  @db.Uuid
+  partnerId       String?  @db.Uuid
+  systemCode      String?
 
   @@index([tenantId])
   @@index([tenantId, currencyCode])
@@ -1045,16 +1225,16 @@ model MspAccount {
 }
 
 model MspLedgerEntry {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId      String
-  accountId     String   @db.Uuid
-  entryDate     DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
-  occurredAt    DateTime @default(now()) @db.Timestamp(3)
-  source        String
-  ref           String?
-  amountSigned  Decimal  @db.Decimal(20, 6)
-  note          String?
-  createdAt     DateTime @default(now()) @db.Timestamp(3)
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId        String
+  accountId       String   @db.Uuid
+  entryDate       DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  occurredAt      DateTime @default(now()) @db.Timestamp(3)
+  source          String
+  ref             String?
+  amountSigned    Decimal  @db.Decimal(20, 6)
+  note            String?
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
   createdByUserId String?
 
   @@index([tenantId])
@@ -1063,12 +1243,12 @@ model MspLedgerEntry {
 }
 
 model MspFxPosition {
-  tenantId             String
-  currencyCode         String
+  tenantId              String
+  currencyCode          String
   valuationCurrencyCode String
-  qty                  Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  totalCostValuation   Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  updatedAt            DateTime @default(now()) @db.Timestamp(3)
+  qty                   Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  totalCostValuation    Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  updatedAt             DateTime @default(now()) @db.Timestamp(3)
 
   @@id([tenantId, currencyCode, valuationCurrencyCode])
   @@index([tenantId])
@@ -1077,20 +1257,20 @@ model MspFxPosition {
 }
 
 model MspCustomer {
-  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId         String
-  name            String
-  phone           String?
-  isActive        Boolean  @default(true)
-  note            String?
-  createdAt       DateTime @default(now()) @db.Timestamp(3)
-  updatedAt       DateTime @default(now()) @db.Timestamp(3)
-  createdByUserId String?
-  updatedByUserId String?
-  kycStatus       String   @default("none")
-  kycJson         Json?
-  kycUpdatedAt    DateTime? @db.Timestamp(3)
-  kycVerifiedAt   DateTime? @db.Timestamp(3)
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId            String
+  name                String
+  phone               String?
+  isActive            Boolean   @default(true)
+  note                String?
+  createdAt           DateTime  @default(now()) @db.Timestamp(3)
+  updatedAt           DateTime  @default(now()) @db.Timestamp(3)
+  createdByUserId     String?
+  updatedByUserId     String?
+  kycStatus           String    @default("none")
+  kycJson             Json?
+  kycUpdatedAt        DateTime? @db.Timestamp(3)
+  kycVerifiedAt       DateTime? @db.Timestamp(3)
   kycVerifiedByUserId String?
 
   @@index([tenantId])
@@ -1101,7 +1281,7 @@ model MspCustomer {
 
 model MspBranch {
   id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId         String
+  tenantId        String
   name            String
   code            String?
   address         String?
@@ -1116,17 +1296,17 @@ model MspBranch {
 }
 
 model MspCashMovement {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId      String
-  direction     String
-  movementDate  DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
-  currencyCode  String
-  amount        Decimal  @db.Decimal(20, 6)
-  branchId      String?  @db.Uuid
-  note          String?
-  createdAt     DateTime @default(now()) @db.Timestamp(3)
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId        String
+  direction       String
+  movementDate    DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  currencyCode    String
+  amount          Decimal  @db.Decimal(20, 6)
+  branchId        String?  @db.Uuid
+  note            String?
+  createdAt       DateTime @default(now()) @db.Timestamp(3)
   createdByUserId String?
-  accountId     String?  @db.Uuid
+  accountId       String?  @db.Uuid
 
   @@index([tenantId])
   @@index([tenantId, movementDate])
@@ -1134,20 +1314,20 @@ model MspCashMovement {
 }
 
 model MspCashSession {
-  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   tenantId          String
-  accountId         String   @db.Uuid
+  accountId         String    @db.Uuid
   currencyCode      String
-  status            String   @default("open")
-  openedAt          DateTime @default(now()) @db.Timestamp(3)
+  status            String    @default("open")
+  openedAt          DateTime  @default(now()) @db.Timestamp(3)
   closedAt          DateTime? @db.Timestamp(3)
-  openedBookBalance Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  closedBookBalance Decimal? @db.Decimal(20, 6)
-  countedAmount     Decimal? @db.Decimal(20, 6)
-  variance          Decimal? @db.Decimal(20, 6)
+  openedBookBalance Decimal   @default(dbgenerated("0")) @db.Decimal(20, 6)
+  closedBookBalance Decimal?  @db.Decimal(20, 6)
+  countedAmount     Decimal?  @db.Decimal(20, 6)
+  variance          Decimal?  @db.Decimal(20, 6)
   denominationsJson Json?
   note              String?
-  createdAt         DateTime @default(now()) @db.Timestamp(3)
+  createdAt         DateTime  @default(now()) @db.Timestamp(3)
   createdByUserId   String?
   closedByUserId    String?
 
@@ -1158,19 +1338,19 @@ model MspCashSession {
 }
 
 model MspBankStatement {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id              String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   tenantId        String
-  accountId       String   @db.Uuid
+  accountId       String    @db.Uuid
   currencyCode    String
-  statementFrom   DateTime @db.Date
-  statementTo     DateTime @db.Date
-  openingBalance  Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  closingBalance  Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  status          String   @default("open")
+  statementFrom   DateTime  @db.Date
+  statementTo     DateTime  @db.Date
+  openingBalance  Decimal   @default(dbgenerated("0")) @db.Decimal(20, 6)
+  closingBalance  Decimal   @default(dbgenerated("0")) @db.Decimal(20, 6)
+  status          String    @default("open")
   lockedAt        DateTime? @db.Timestamp(3)
   lockedByUserId  String?
   note            String?
-  createdAt       DateTime @default(now()) @db.Timestamp(3)
+  createdAt       DateTime  @default(now()) @db.Timestamp(3)
   createdByUserId String?
 
   @@index([tenantId])
@@ -1179,14 +1359,14 @@ model MspBankStatement {
 }
 
 model MspBankStatementLine {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId    String
-  statementId String   @db.Uuid
-  rowIndex    Int      @default(0)
-  lineDate    DateTime @db.Date
-  description String?
-  reference   String?
-  amountSigned Decimal @db.Decimal(20, 6)
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId     String
+  statementId  String   @db.Uuid
+  rowIndex     Int      @default(0)
+  lineDate     DateTime @db.Date
+  description  String?
+  reference    String?
+  amountSigned Decimal  @db.Decimal(20, 6)
   balance      Decimal? @db.Decimal(20, 6)
   createdAt    DateTime @default(now()) @db.Timestamp(3)
 
@@ -1210,7 +1390,7 @@ model MspBankStatementMatch {
 }
 
 model MspSettlement {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   tenantId        String
   partnerId       String   @db.Uuid
   direction       String
@@ -1241,25 +1421,25 @@ model MspHawalaPartner {
 }
 
 model MspHawalaTransfer {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId      String
-  transferNumber Int
-  status        String   @default("open")
-  transferDate  DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
-  currencyCode  String
-  amount        Decimal  @db.Decimal(20, 6)
-  fee           Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
-  total         Decimal  @db.Decimal(20, 6)
-  senderName    String
-  senderPhone   String?
-  receiverName  String
-  receiverPhone String?
-  partnerId     String?  @db.Uuid
-  note          String?
-  createdAt     DateTime @default(now()) @db.Timestamp(3)
-  createdByUserId String?
-  receiveAccountId String? @db.Uuid
-  customerId       String? @db.Uuid
+  id               String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId         String
+  transferNumber   Int
+  status           String   @default("open")
+  transferDate     DateTime @default(dbgenerated("CURRENT_DATE")) @db.Date
+  currencyCode     String
+  amount           Decimal  @db.Decimal(20, 6)
+  fee              Decimal  @default(dbgenerated("0")) @db.Decimal(20, 6)
+  total            Decimal  @db.Decimal(20, 6)
+  senderName       String
+  senderPhone      String?
+  receiverName     String
+  receiverPhone    String?
+  partnerId        String?  @db.Uuid
+  note             String?
+  createdAt        DateTime @default(now()) @db.Timestamp(3)
+  createdByUserId  String?
+  receiveAccountId String?  @db.Uuid
+  customerId       String?  @db.Uuid
   fundingSource    String?
 
   @@unique([tenantId, transferNumber])
@@ -1281,23 +1461,23 @@ model MspHawalaPayout {
 }
 
 model MspAmlAlert {
-  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  tenantId    String
-  createdAt   DateTime @default(now()) @db.Timestamp(3)
-  status      String   @default("open")
-  ruleCode    String
-  severity    String   @default("medium")
-  title       String
-  fingerprint String
-  sourceType  String
-  sourceId    String?  @db.Uuid
-  customerId  String?  @db.Uuid
-  currencyCode String?
-  amount      Decimal? @db.Decimal(20, 6)
-  detailsJson Json?
-  closedAt    DateTime? @db.Timestamp(3)
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  tenantId       String
+  createdAt      DateTime  @default(now()) @db.Timestamp(3)
+  status         String    @default("open")
+  ruleCode       String
+  severity       String    @default("medium")
+  title          String
+  fingerprint    String
+  sourceType     String
+  sourceId       String?   @db.Uuid
+  customerId     String?   @db.Uuid
+  currencyCode   String?
+  amount         Decimal?  @db.Decimal(20, 6)
+  detailsJson    Json?
+  closedAt       DateTime? @db.Timestamp(3)
   closedByUserId String?
-  closeNote   String?
+  closeNote      String?
 }
 
 model ShopCategory {
@@ -2075,4 +2255,141 @@ model ShopInvoicePayment {
 
   @@index([tenantId, invoiceId, createdAt(sort: Desc)])
   @@index([tenantId, cashSessionId, createdAt(sort: Desc)])
+}
+
+model ReferralCode {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  tenantId  String?
+  userId    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  referrals Referral[] @relation("ReferralReferrerCode")
+
+  @@unique([tenantId])
+  @@unique([userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Referral {
+  id                String         @id @default(uuid())
+  referrerCodeId    String
+  referrerTenantId  String?
+  referrerUserId    String?
+  referredTenantId  String
+  referredUserId    String
+  source            String?
+  moduleId          String?
+  status            ReferralStatus @default(pending)
+  registeredAt      DateTime       @default(now())
+  moduleRequestedAt DateTime?
+  paymentReceivedAt DateTime?
+  activatedAt       DateTime?
+  rewardGrantedAt   DateTime?
+  rejectedAt        DateTime?
+  rejectedReason    String?
+
+  referrerCode   ReferralCode @relation("ReferralReferrerCode", fields: [referrerCodeId], references: [id], onDelete: Restrict)
+  referrerTenant Tenant?      @relation("ReferralsAsReferrerTenant", fields: [referrerTenantId], references: [id], onDelete: SetNull)
+  referrerUser   User?        @relation("ReferralsAsReferrerUser", fields: [referrerUserId], references: [id], onDelete: SetNull)
+  referredTenant Tenant       @relation("ReferralsAsReferredTenant", fields: [referredTenantId], references: [id], onDelete: Cascade)
+  referredUser   User         @relation("ReferralsAsReferredUser", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  @@unique([referredTenantId])
+  @@index([referrerTenantId, status, registeredAt(sort: Desc)])
+  @@index([referrerUserId, status, registeredAt(sort: Desc)])
+  @@index([referredTenantId, status])
+}
+
+model ReferralRewardGrant {
+  id              String             @id @default(uuid())
+  tenantId        String
+  rewardType      ReferralRewardType
+  grantedAt       DateTime           @default(now())
+  grantedByUserId String?
+  metadataJson    Json
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  grantedBy User?  @relation("ReferralRewardGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, rewardType])
+  @@index([tenantId, grantedAt(sort: Desc)])
+}
+
+model TenantPartnerProfile {
+  tenantId               String    @id
+  isPremiumPartner       Boolean   @default(false)
+  premiumGrantedAt       DateTime?
+  premiumGrantedByUserId String?
+  betaAccessEnabled      Boolean   @default(false)
+  betaEnabledAt          DateTime?
+  betaEnabledByUserId    String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  tenant           Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  premiumGrantedBy User?  @relation("TenantPartnerPremiumGrantedBy", fields: [premiumGrantedByUserId], references: [id], onDelete: SetNull)
+  betaEnabledBy    User?  @relation("TenantPartnerBetaEnabledBy", fields: [betaEnabledByUserId], references: [id], onDelete: SetNull)
+
+  @@index([isPremiumPartner])
+}
+
+model PartnerFeedback {
+  id             String   @id @default(uuid())
+  tenantId       String
+  userId         String
+  subject        String
+  message        String
+  isBetaFeedback Boolean  @default(false)
+  status         String   @default("open")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+}
+
+model ActivationRequestTracking {
+  id                 String                  @id @default(uuid())
+  tenantId           String
+  moduleId           String
+  subscriptionItemId String?
+  status             ActivationRequestStatus @default(pending)
+  requestedAt        DateTime                @default(now())
+  paymentReceivedAt  DateTime?
+  activatedAt        DateTime?
+  rejectedAt         DateTime?
+  paymentNotes       String?
+  activationNotes    String?
+  confirmedByUserId  String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscriptionItem SubscriptionItem? @relation(fields: [subscriptionItemId], references: [id], onDelete: SetNull)
+  confirmedBy      User?             @relation("ActivationRequestConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, moduleId])
+  @@unique([subscriptionItemId])
+  @@index([status, requestedAt(sort: Desc)])
+}
+
+model PlatformReferralSettings {
+  id                        String   @id @default("default")
+  bundleStepPercent         Int      @default(5)
+  bundleMaxPercent          Int      @default(25)
+  loyaltyExtraPercent       Int      @default(5)
+  invoiceDiscountPercent    Int      @default(10)
+  freeMonthAtReferrals      Int      @default(3)
+  premiumPartnerAtReferrals Int      @default(5)
+  loyaltyExtraAtReferrals   Int      @default(10)
+  updatedAt                 DateTime @updatedAt
 }

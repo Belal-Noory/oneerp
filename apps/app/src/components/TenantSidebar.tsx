@@ -115,7 +115,8 @@ export function TenantSidebar(props: { tenantSlug: string; variant?: "desktop" |
     () => [
       { href: `/t/${props.tenantSlug}/dashboard`, label: t("app.nav.dashboard"), icon: <IconHome /> },
       { href: `/t/${props.tenantSlug}/modules`, label: t("app.nav.modules"), icon: <IconGrid /> },
-      { href: `/t/${props.tenantSlug}/onboarding`, label: t("app.nav.onboarding"), icon: <IconSpark /> }
+      { href: `/t/${props.tenantSlug}/onboarding`, label: t("app.nav.onboarding"), icon: <IconSpark /> },
+      { href: `/t/${props.tenantSlug}/referrals`, label: t("app.nav.referrals"), icon: <IconReferral /> }
     ],
     [props.tenantSlug, t]
   );
@@ -176,6 +177,12 @@ export function TenantSidebar(props: { tenantSlug: string; variant?: "desktop" |
             active={pathname === `/t/${props.tenantSlug}/team`}
             icon={<IconUsers />}
             label={t("app.nav.team")}
+          />
+          <SidebarLink
+            href={`/t/${props.tenantSlug}/support-center`}
+            active={pathname === `/t/${props.tenantSlug}/support-center`}
+            icon={<IconSupport />}
+            label={t("app.nav.supportCenter")}
           />
         </div>
 
@@ -287,6 +294,30 @@ function IconSpark() {
   );
 }
 
+function IconReferral() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M16 8a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M4 20a6 6 0 0 1 10.8-3.6"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M17.5 13.5h3m-1.5-1.5v3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function IconFuel() {
   return (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -333,6 +364,30 @@ function IconUsers() {
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M16 11a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z" stroke="currentColor" strokeWidth="1.5" />
       <path d="M4 20a6 6 0 0 1 16 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconSupport() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6.5 12a5.5 5.5 0 0 1 11 0v3.5a2 2 0 0 1-2 2H14"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.5 12v4a2 2 0 0 0 2 2h2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10 19.5h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M6.5 12a2 2 0 0 0-2 2v1.5a1.5 1.5 0 0 0 1.5 1.5H6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M17.5 12a2 2 0 0 1 2 2v1.5a1.5 1.5 0 0 1-1.5 1.5H17.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

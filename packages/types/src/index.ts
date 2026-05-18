@@ -44,6 +44,7 @@ export type RegisterRequest = {
     phone?: string;
     email?: string;
   };
+  referralCode?: string;
 };
 
 export type AuthTokens = {

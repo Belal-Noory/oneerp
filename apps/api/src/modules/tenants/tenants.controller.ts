@@ -287,7 +287,11 @@ export class TenantsController {
   @Post("current/modules/:moduleId/request")
   @UseGuards(AuthGuard("jwt"), TenantGuard, PermissionsGuard)
   @RequirePermissions("platform.modules.enabled.read", "platform.modules.catalog.read")
-  async requestModule(@Req() req: { tenantId: string; user: { id: string } }, @Param("moduleId") moduleId: string) {
+  async requestModule(
+    @Req() req: { tenantId: string; user: { id: string } },
+    @Param("moduleId") moduleId: string,
+    @Body() body?: { referralCode?: string }
+  ) {
     await this.ensureCoreModuleCatalog();
 
     const mod = await this.prisma.moduleCatalog.findUnique({ where: { id: moduleId }, select: { id: true, isActive: true } });
@@ -303,14 +307,75 @@ export class TenantsController {
       throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
     }
 
-    await this.prisma.subscriptionItem.upsert({
-      where: { tenantId_subscriptionId_moduleId: { tenantId: req.tenantId, subscriptionId: subscription.id, moduleId } },
-      update: { status: "requested", endedAt: null, lockedAt: null, startedAt: new Date() },
-      create: { tenantId: req.tenantId, subscriptionId: subscription.id, moduleId, status: "requested" }
-    });
+    const now = new Date();
+    const referralCode = typeof body?.referralCode === "string" ? body.referralCode.trim().replace(/\s+/g, "").toUpperCase() : "";
 
-    await this.prisma.auditLog.create({
-      data: { tenantId: req.tenantId, actorUserId: req.user.id, action: "module.request", entityType: "module", entityId: moduleId, metadataJson: {} }
+    await this.prisma.$transaction(async (tx) => {
+      const item = await tx.subscriptionItem.upsert({
+        where: { tenantId_subscriptionId_moduleId: { tenantId: req.tenantId, subscriptionId: subscription.id, moduleId } },
+        update: { status: "requested", endedAt: null, lockedAt: null, startedAt: now },
+        create: { tenantId: req.tenantId, subscriptionId: subscription.id, moduleId, status: "requested", startedAt: now },
+        select: { id: true }
+      });
+
+      await tx.activationRequestTracking.upsert({
+        where: { tenantId_moduleId: { tenantId: req.tenantId, moduleId } },
+        update: { status: "pending", requestedAt: now, rejectedAt: null, paymentReceivedAt: null, activatedAt: null, subscriptionItemId: item.id },
+        create: { tenantId: req.tenantId, moduleId, status: "pending", requestedAt: now, subscriptionItemId: item.id }
+      });
+
+      if (referralCode) {
+        const existingReferral = await tx.referral.findUnique({ where: { referredTenantId: req.tenantId }, select: { id: true } });
+        if (!existingReferral) {
+          const referrer = await tx.referralCode.findUnique({
+            where: { code: referralCode },
+            select: { id: true, isActive: true, tenantId: true, userId: true }
+          });
+          if (referrer && referrer.isActive && referrer.tenantId !== req.tenantId && referrer.userId !== req.user.id) {
+            const derivedTenantId =
+              referrer.tenantId ??
+              (referrer.userId
+                ? (
+                    await tx.membership.findFirst({
+                      where: { userId: referrer.userId, status: "active" },
+                      select: { tenantId: true },
+                      orderBy: { createdAt: "asc" }
+                    })
+                  )?.tenantId ??
+                  null
+                : null);
+            await tx.referral.create({
+              data: {
+                referrerCodeId: referrer.id,
+                referrerTenantId: derivedTenantId ?? undefined,
+                referrerUserId: referrer.userId ?? undefined,
+                referredTenantId: req.tenantId,
+                referredUserId: req.user.id,
+                source: "module_request",
+                moduleId,
+                status: "awaiting_payment_confirmation",
+                moduleRequestedAt: now
+              }
+            });
+          }
+        }
+      }
+
+      await tx.referral.updateMany({
+        where: { referredTenantId: req.tenantId, moduleRequestedAt: null },
+        data: { moduleRequestedAt: now, moduleId, status: "awaiting_payment_confirmation" }
+      });
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: req.tenantId,
+          actorUserId: req.user.id,
+          action: "module.request",
+          entityType: "module",
+          entityId: moduleId,
+          metadataJson: { referralCode: referralCode || null }
+        }
+      });
     });
 
     return { data: { success: true } };

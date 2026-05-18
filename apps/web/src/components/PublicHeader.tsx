@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { isRtlLocale, type Locale, t as translate } from "@oneerp/i18n";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { IconUser, LogoMark } from "@/components/Graphics";
@@ -6,9 +9,51 @@ import { IconUser, LogoMark } from "@/components/Graphics";
 export function PublicHeader(props: { locale: Locale }) {
   const t = (key: string) => translate(props.locale, key);
   const rtl = isRtlLocale(props.locale);
+  const [promoDismissed, setPromoDismissed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setPromoDismissed(window.localStorage.getItem("oneerp_promo_bar_v1") === "dismissed");
+    } catch {
+      setPromoDismissed(false);
+    }
+  }, []);
 
   return (
     <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/80 backdrop-blur">
+      <div
+        className={[
+          "border-b border-amber-100 bg-gradient-to-r from-amber-50 via-white to-primary-50 transition-all duration-300",
+          promoDismissed ? "max-h-0 overflow-hidden opacity-0" : "max-h-24 opacity-100"
+        ].join(" ")}
+      >
+        <div className={["mx-auto flex max-w-6xl items-start justify-between gap-3 px-4 py-2.5 text-xs text-gray-900", rtl ? "flex-row-reverse" : "flex-row"].join(" ")}>
+          <div className="min-w-0">
+            <div className="font-semibold text-amber-900">{t("public.promo.top.title")}</div>
+            <div className="mt-0.5 text-gray-700">{t("public.promo.top.subtitle")}</div>
+          </div>
+          <div className={["flex items-center gap-2", rtl ? "flex-row-reverse" : "flex-row"].join(" ")}>
+            <Link href="/pricing" className="whitespace-nowrap rounded-full bg-white px-3 py-1 text-xs font-medium text-primary-700 shadow-sm ring-1 ring-primary-100 hover:bg-primary-50">
+              {t("public.promo.top.cta")}
+            </Link>
+            <button
+              type="button"
+              aria-label={t("public.promo.top.dismiss")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              onClick={() => {
+                try {
+                  window.localStorage.setItem("oneerp_promo_bar_v1", "dismissed");
+                } catch {}
+                setPromoDismissed(true);
+              }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
       <div className={["mx-auto flex h-16 max-w-6xl items-center justify-between px-4", rtl ? "flex-row-reverse" : "flex-row"].join(" ")}>
         <div className={["flex items-center gap-6", rtl ? "flex-row-reverse" : "flex-row"].join(" ")}>
           <Link href="/" className="inline-flex items-center gap-2 text-lg font-semibold text-gray-900">

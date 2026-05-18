@@ -16,6 +16,8 @@ import { OfflineModule } from "./modules/offline/offline.module";
 import { FuelModule } from "./modules/fuel/fuel.module";
 import { MspModule } from "./modules/msp/msp.module";
 import { PrintPressModule } from "./modules/printpress/printpress.module";
+import { ReferralsModule } from "./modules/referrals/referrals.module";
+import { SupportCenterModule } from "./modules/support-center/support-center.module";
 
 @Module({
   imports: [
@@ -33,7 +35,9 @@ import { PrintPressModule } from "./modules/printpress/printpress.module";
     OfflineModule,
     FuelModule,
     MspModule,
-    PrintPressModule
+    PrintPressModule,
+    ReferralsModule,
+    SupportCenterModule
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }]
 })

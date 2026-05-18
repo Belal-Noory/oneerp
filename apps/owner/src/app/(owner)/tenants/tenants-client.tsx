@@ -25,6 +25,19 @@ type TenantDetail = {
   legalName: string;
   createdAt: string;
   owner: { id: string; fullName: string; email: string | null; phone: string | null } | null;
+  partnerProfile: { isPremiumPartner: boolean; premiumGrantedAt: string | null; betaAccessEnabled: boolean; betaEnabledAt: string | null };
+  partnerFeedback: { id: string; subject: string; message: string; isBetaFeedback: boolean; status: string; createdAt: string }[];
+  referralStats: {
+    total: number;
+    successful: number;
+    pending: number;
+    awaitingPaymentConfirmation: number;
+    paymentReceived: number;
+    activated: number;
+    rewardGranted: number;
+    rejected: number;
+  };
+  referralRewards: { rewardType: string; grantedAt: string }[];
   roles: { id: string; name: string }[];
   memberships: {
     id: string;
@@ -40,8 +53,10 @@ type TenantDetail = {
     status: string;
     subscriptionType: string | null;
     billingCycle: string | null;
+    listPriceAmount: string | null;
     priceAmount: string | null;
     priceCurrency: string | null;
+    discountPercent: number | null;
     currentPeriodEndAt: string | null;
     graceEndsAt: string | null;
     lockedAt: string | null;
@@ -81,6 +96,7 @@ export function OwnerTenantsClient() {
   const [addUserFullName, setAddUserFullName] = useState("");
   const [addUserRole, setAddUserRole] = useState("Staff");
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [partnerNotesErrorKey, setPartnerNotesErrorKey] = useState<string | null>(null);
 
   const applySubscriptionItemUpdate = useCallback((patch: { id: string; moduleId: string; status: string; billingCycle: string | null; currentPeriodEndAt: string | null; graceEndsAt: string | null; lockedAt: string | null }) => {
     setDetail((prev) => {
@@ -112,6 +128,31 @@ export function OwnerTenantsClient() {
       setDetailLoading(false);
     }
   }, []);
+
+  const updatePartnerProfile = useCallback(
+    async (patch: { isPremiumPartner?: boolean; betaAccessEnabled?: boolean }) => {
+      if (!detail?.id) return;
+      setActing("partner-profile");
+      setPartnerNotesErrorKey(null);
+      try {
+        const res = await apiFetch(`/api/owner/tenants/${encodeURIComponent(detail.id)}/partner-profile`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch)
+        });
+        if (!res.ok) {
+          setPartnerNotesErrorKey("errors.internal");
+          return;
+        }
+        await loadTenantDetail(detail.id, true);
+      } catch {
+        setPartnerNotesErrorKey("errors.internal");
+      } finally {
+        setActing(null);
+      }
+    },
+    [detail?.id, loadTenantDetail]
+  );
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -238,6 +279,8 @@ export function OwnerTenantsClient() {
                         <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("app.owner.table.module")}</th>
                         <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("common.status")}</th>
                         <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("app.owner.billing.subscriptionType")}</th>
+                        <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("app.owner.billing.price")}</th>
+                        <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("app.owner.billing.discount")}</th>
                         <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("app.owner.billing.periodEnd")}</th>
                         <th className="border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-900">{t("app.owner.billing.graceEnd")}</th>
                         <th className="border-b border-gray-200 px-3 py-2 text-right font-medium text-gray-900">{t("app.owner.table.actions")}</th>
@@ -246,7 +289,7 @@ export function OwnerTenantsClient() {
                     <tbody>
                       {detail.enabledModules.length === 0 && detail.subscriptionItems.length === 0 ? (
                         <tr>
-                          <td className="px-3 py-4 text-gray-600" colSpan={6}>
+                          <td className="px-3 py-4 text-gray-600" colSpan={8}>
                             {t("app.owner.billing.empty")}
                           </td>
                         </tr>
@@ -277,6 +320,23 @@ export function OwnerTenantsClient() {
                                 </td>
                                 <td className="border-b border-gray-200 px-3 py-3 text-gray-700">{sub ? statusLabel : t("app.owner.status.notConfigured")}</td>
                                 <td className="border-b border-gray-200 px-3 py-3 text-gray-700">{sub?.subscriptionType ?? "—"}</td>
+                                <td className="border-b border-gray-200 px-3 py-3 text-gray-700 tabular">
+                                  {sub?.priceAmount && sub.priceCurrency ? (
+                                    <div>
+                                      {sub.listPriceAmount && sub.discountPercent && sub.discountPercent > 0 ? (
+                                        <div className="text-xs text-gray-500 line-through">
+                                          {sub.listPriceAmount} {sub.priceCurrency}
+                                        </div>
+                                      ) : null}
+                                      <div className="font-medium text-gray-900">
+                                        {sub.priceAmount} {sub.priceCurrency}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                                <td className="border-b border-gray-200 px-3 py-3 text-gray-700 tabular">{sub?.discountPercent ? `${sub.discountPercent}%` : "—"}</td>
                                 <td className="border-b border-gray-200 px-3 py-3 text-gray-700">{sub?.currentPeriodEndAt ? new Date(sub.currentPeriodEndAt).toLocaleDateString() : "—"}</td>
                                 <td className="border-b border-gray-200 px-3 py-3 text-gray-700">{sub?.graceEndsAt ? new Date(sub.graceEndsAt).toLocaleDateString() : "—"}</td>
                                 <td className="border-b border-gray-200 px-3 py-3 text-right">
@@ -396,6 +456,105 @@ export function OwnerTenantsClient() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                <div className="text-sm font-semibold text-gray-900">{t("app.owner.partner.title")}</div>
+                <div className="mt-1 text-xs text-gray-600">{t("app.owner.partner.subtitle")}</div>
+
+                {partnerNotesErrorKey ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{t(partnerNotesErrorKey)}</div> : null}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-gray-200 bg-white p-4">
+                    <div className="text-xs font-semibold text-gray-900">{t("app.owner.partner.premiumPartner")}</div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <div className="text-sm text-gray-700">{detail.partnerProfile.isPremiumPartner ? t("common.status.active") : t("common.status.inactive")}</div>
+                      <button
+                        type="button"
+                        disabled={!!acting}
+                        className="inline-flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                        onClick={() => void updatePartnerProfile({ isPremiumPartner: !detail.partnerProfile.isPremiumPartner })}
+                      >
+                        {detail.partnerProfile.isPremiumPartner ? t("app.owner.partner.disable") : t("app.owner.partner.enable")}
+                      </button>
+                    </div>
+                    {detail.partnerProfile.isPremiumPartner && detail.partnerProfile.premiumGrantedAt ? (
+                      <div className="mt-2 text-xs text-gray-600">{new Date(detail.partnerProfile.premiumGrantedAt).toLocaleString()}</div>
+                    ) : null}
+                    {detail.partnerProfile.isPremiumPartner ? (
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                        {t("app.referrals.premium.badge")}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-white p-4">
+                    <div className="text-xs font-semibold text-gray-900">{t("app.owner.partner.betaAccess")}</div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                      <div className="text-sm text-gray-700">{detail.partnerProfile.betaAccessEnabled ? t("common.status.active") : t("common.status.inactive")}</div>
+                      <button
+                        type="button"
+                        disabled={!!acting}
+                        className="inline-flex h-9 items-center justify-center rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                        onClick={() => void updatePartnerProfile({ betaAccessEnabled: !detail.partnerProfile.betaAccessEnabled })}
+                      >
+                        {detail.partnerProfile.betaAccessEnabled ? t("app.owner.partner.disable") : t("app.owner.partner.enable")}
+                      </button>
+                    </div>
+                    {detail.partnerProfile.betaAccessEnabled && detail.partnerProfile.betaEnabledAt ? (
+                      <div className="mt-2 text-xs text-gray-600">{new Date(detail.partnerProfile.betaEnabledAt).toLocaleString()}</div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <Stat label={t("app.owner.partner.stats.total")} value={detail.referralStats.total} />
+                  <Stat label={t("app.owner.partner.stats.successful")} value={detail.referralStats.successful} />
+                  <Stat label={t("app.owner.partner.stats.pending")} value={detail.referralStats.pending} />
+                </div>
+
+                <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="text-xs font-semibold text-gray-900">{t("app.owner.partner.rewards")}</div>
+                  {detail.referralRewards.length === 0 ? (
+                    <div className="mt-2 text-sm text-gray-600">{t("app.owner.partner.rewards.empty")}</div>
+                  ) : (
+                    <div className="mt-2 space-y-1 text-sm text-gray-700">
+                      {detail.referralRewards.slice(0, 6).map((r) => (
+                        <div key={`${r.rewardType}:${r.grantedAt}`} className="flex items-center justify-between gap-3">
+                          <span className="font-medium text-gray-900">{t(`app.referrals.reward.${r.rewardType}`)}</span>
+                          <span className="text-xs text-gray-600">{new Date(r.grantedAt).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="text-xs font-semibold text-gray-900">{t("app.owner.partner.feedback")}</div>
+                  {detail.partnerFeedback.length === 0 ? (
+                    <div className="mt-2 text-sm text-gray-600">{t("app.owner.partner.feedback.empty")}</div>
+                  ) : (
+                    <div className="mt-2 space-y-3">
+                      {detail.partnerFeedback.slice(0, 5).map((f) => (
+                        <div key={f.id} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900">{f.subject}</div>
+                              <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700">{f.message}</div>
+                            </div>
+                            {f.isBetaFeedback ? (
+                              <span className="inline-flex shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                                {t("app.owner.partner.feedback.beta")}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 text-xs text-gray-600">{new Date(f.createdAt).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -679,6 +838,15 @@ export function OwnerTenantsClient() {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+function Stat(props: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="text-xs font-medium text-gray-500">{props.label}</div>
+      <div className="mt-2 text-2xl font-semibold text-gray-900 tabular">{String(props.value)}</div>
     </div>
   );
 }

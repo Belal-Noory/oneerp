@@ -468,26 +468,60 @@ function DetailCard(props: { title: string; items: string[] }) {
 }
 
 function PricingCard(props: { t: (key: string) => string }) {
+  const defaultPercent = 5;
+  const referralPercent = 10;
   return (
     <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
       <div className="text-sm font-semibold text-gray-900">{props.t("common.pricing.title")}</div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900">
+          {props.t("public.discounts.businessGrowthOffer")} • {props.t("public.discounts.save")} {defaultPercent}%
+        </span>
+        <span className="inline-flex items-center rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-800">
+          {props.t("public.discounts.useReferral")} {referralPercent}%
+        </span>
+        <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800">
+          {props.t("public.pricing.bundleSavingsLabel")} {props.t("public.pricing.saveUpTo25")}
+        </span>
+      </div>
       <div className="mt-4 space-y-2 text-sm text-gray-700">
-        <div className="flex items-center justify-between gap-3">
-          <span>{props.t("common.pricing.online.label")}</span>
-          <span className="font-semibold text-gray-900 tabular">{props.t("common.pricing.online.value")}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span>{props.t("common.pricing.desktopNoChanges.label")}</span>
-          <span className="font-semibold text-gray-900 tabular">{props.t("common.pricing.desktopNoChanges.value")}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span>{props.t("common.pricing.desktopWithChanges.label")}</span>
-          <span className="font-semibold text-gray-900 tabular">{props.t("common.pricing.desktopWithChanges.value")}</span>
-        </div>
+        <PriceLine t={props.t} label={props.t("common.pricing.online.label")} listAmount={40} suffix={props.t("public.pricing.perMonth")} primaryPercent={defaultPercent} secondaryPercent={referralPercent} />
+        <PriceLine t={props.t} label={props.t("common.pricing.desktopNoChanges.label")} listAmount={1000} suffix={props.t("public.pricing.oneTime")} primaryPercent={defaultPercent} secondaryPercent={referralPercent} />
+        <PriceLine t={props.t} label={props.t("common.pricing.desktopWithChanges.label")} listAmount={2000} suffix={props.t("public.pricing.oneTime")} primaryPercent={defaultPercent} secondaryPercent={referralPercent} />
         <div className="pt-2 text-xs text-gray-600">{props.t("common.pricing.changesPeriod")}</div>
+        <div className="text-xs text-gray-600">{props.t("public.discounts.bundleNote")}</div>
       </div>
     </div>
   );
+}
+
+function PriceLine(props: { t: (key: string) => string; label: string; listAmount: number; suffix: string; primaryPercent: number; secondaryPercent: number }) {
+  const primary = Number.isFinite(props.primaryPercent) ? Math.max(0, Math.min(25, props.primaryPercent)) : 0;
+  const secondary = Number.isFinite(props.secondaryPercent) ? Math.max(0, Math.min(25, props.secondaryPercent)) : 0;
+  const discounted = primary > 0 ? props.listAmount * ((100 - primary) / 100) : props.listAmount;
+  const savings = Math.max(0, props.listAmount - discounted);
+  const discountedReferral = secondary > primary ? props.listAmount * ((100 - secondary) / 100) : discounted;
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span>{props.label}</span>
+      <span className="text-right tabular">
+        {primary > 0 ? <span className="block text-xs text-gray-500 line-through">{formatUsd(props.listAmount)} {props.suffix}</span> : null}
+        <span className="block font-semibold text-gray-900">{formatUsd(discounted)} {props.suffix}</span>
+        {primary > 0 ? <span className="block text-xs text-emerald-700">{`${props.t("public.discounts.smartSavings")}: -${formatUsd(savings)}`}</span> : null}
+        {secondary > primary ? (
+          <span className="block text-[11px] text-primary-700">
+            {props.t("public.discounts.withReferral")} {formatUsd(discountedReferral)} {props.suffix}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function formatUsd(amount: number): string {
+  const v = Number.isFinite(amount) ? amount : 0;
+  const fixed = v % 1 === 0 ? v.toFixed(0) : v.toFixed(2);
+  return `$${fixed}`;
 }
 
 function moduleHighlights(id: string): string[] {

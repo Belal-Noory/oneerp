@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OwnerGuard } from "../../shared/owner.guard";
 import { ensureFuelDefaultRolePermissions, ensureMspDefaultRolePermissions } from "../../shared/module-enabled.guard";
-import { ApproveModuleRequestDto, RejectModuleRequestDto } from "./dto/approve-module-request.dto";
+import { ApproveModuleRequestDto, RejectModuleRequestDto, UpdateReferralSettingsDto } from "./dto/approve-module-request.dto";
 import { SetPeriodDto } from "./dto/set-period.dto";
 import { AddMembershipDto } from "./dto/add-membership.dto";
 import { UpsertTutorialCategoryDto, UpsertTutorialDto, UpsertTutorialSeriesDto } from "./dto/tutorials.dto";
@@ -44,6 +44,26 @@ function randomPassword(length: number): string {
 export class OwnerController {
   constructor(private readonly prisma: PrismaService) {}
 
+  private resolvePublicWebBaseUrl(headers?: Record<string, unknown>): string {
+    const fromEnv = (process.env.PUBLIC_WEB_URL ?? process.env.PUBLIC_WEB_BASE_URL ?? "").trim();
+    if (fromEnv) return fromEnv.replace(/\/+$/, "");
+
+    const protoRaw = typeof headers?.["x-forwarded-proto"] === "string" ? (headers["x-forwarded-proto"] as string) : null;
+    const hostRaw =
+      (typeof headers?.["x-forwarded-host"] === "string" ? (headers["x-forwarded-host"] as string) : null) ??
+      (typeof headers?.origin === "string" ? (headers.origin as string) : null) ??
+      (typeof headers?.host === "string" ? (headers.host as string) : null);
+
+    const host = hostRaw?.split(",")[0]?.trim() ?? null;
+    const proto = (protoRaw?.split(",")[0]?.trim() ?? "").toLowerCase() === "https" ? "https" : "http";
+    if (host) {
+      const bare = host.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").replace(/^(www|app|owner|api)\./, "");
+      return `${proto}://${bare}`;
+    }
+
+    return "http://localhost:3000";
+  }
+
   @Get("me")
   async me(@Req() req: { user: { id: string; email?: string | null; fullName: string } }) {
     return { data: { id: req.user.id, email: req.user.email ?? null, fullName: req.user.fullName } };
@@ -76,8 +96,10 @@ export class OwnerController {
                 status: true,
                 subscriptionType: true,
                 billingCycle: true,
+                listPriceAmount: true,
                 priceAmount: true,
                 priceCurrency: true,
+                discountPercent: true,
                 currentPeriodEndAt: true,
                 graceEndsAt: true,
                 lockedAt: true,
@@ -106,8 +128,10 @@ export class OwnerController {
           status: i.status,
           subscriptionType: i.subscriptionType,
           billingCycle: i.billingCycle,
+          listPriceAmount: i.listPriceAmount?.toString() ?? null,
           priceAmount: i.priceAmount?.toString() ?? null,
           priceCurrency: i.priceCurrency ?? null,
+          discountPercent: i.discountPercent ?? null,
           currentPeriodEndAt: i.currentPeriodEndAt,
           graceEndsAt: i.graceEndsAt,
           lockedAt: i.lockedAt,
@@ -129,6 +153,12 @@ export class OwnerController {
         status: true,
         createdAt: true,
         branding: { select: { phone: true, email: true, address: true } },
+        partnerProfile: { select: { isPremiumPartner: true, premiumGrantedAt: true, betaAccessEnabled: true, betaEnabledAt: true } },
+        partnerFeedback: {
+          take: 10,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { id: true, subject: true, message: true, isBetaFeedback: true, status: true, createdAt: true }
+        },
         memberships: {
           where: { status: "active" },
           select: { id: true, status: true, createdAt: true, user: { select: { id: true, fullName: true, email: true, phone: true } }, role: { select: { id: true, name: true } } },
@@ -146,8 +176,10 @@ export class OwnerController {
                 status: true,
                 subscriptionType: true,
                 billingCycle: true,
+                listPriceAmount: true,
                 priceAmount: true,
                 priceCurrency: true,
+                discountPercent: true,
                 currentPeriodStartAt: true,
                 currentPeriodEndAt: true,
                 graceEndsAt: true,
@@ -165,6 +197,23 @@ export class OwnerController {
 
     if (!tenant) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
 
+    const [refTotal, refSuccessful, refPending, refAwaiting, refPaid, refActivated, refRewardGranted, refRejected] = await Promise.all([
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, activatedAt: { not: null } } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, status: "pending" } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, status: "awaiting_payment_confirmation" } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, status: "payment_received" } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, status: "activated" } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, status: "reward_granted" } }),
+      this.prisma.referral.count({ where: { referrerTenantId: tenantId, status: "rejected" } })
+    ]);
+
+    const rewardGrants = await this.prisma.referralRewardGrant.findMany({
+      where: { tenantId },
+      select: { rewardType: true, grantedAt: true },
+      orderBy: [{ grantedAt: "desc" }, { id: "desc" }]
+    });
+
     return {
       data: {
         id: tenant.id,
@@ -175,6 +224,31 @@ export class OwnerController {
         createdAt: tenant.createdAt,
         branding: tenant.branding ?? null,
         owner: tenant.memberships.find((m) => m.role.name === "Owner")?.user ?? null,
+        partnerProfile: {
+          isPremiumPartner: tenant.partnerProfile?.isPremiumPartner ?? false,
+          premiumGrantedAt: tenant.partnerProfile?.premiumGrantedAt ?? null,
+          betaAccessEnabled: tenant.partnerProfile?.betaAccessEnabled ?? false,
+          betaEnabledAt: tenant.partnerProfile?.betaEnabledAt ?? null
+        },
+        partnerFeedback: tenant.partnerFeedback.map((f) => ({
+          id: f.id,
+          subject: f.subject,
+          message: f.message,
+          isBetaFeedback: f.isBetaFeedback,
+          status: f.status,
+          createdAt: f.createdAt
+        })),
+        referralStats: {
+          total: refTotal,
+          successful: refSuccessful,
+          pending: refPending,
+          awaitingPaymentConfirmation: refAwaiting,
+          paymentReceived: refPaid,
+          activated: refActivated,
+          rewardGranted: refRewardGranted,
+          rejected: refRejected
+        },
+        referralRewards: rewardGrants.map((g) => ({ rewardType: g.rewardType, grantedAt: g.grantedAt })),
         roles: tenant.roles.map((r) => ({ id: r.id, name: r.name })),
         memberships: tenant.memberships.map((m) => ({
           id: m.id,
@@ -190,8 +264,10 @@ export class OwnerController {
           status: i.status,
           subscriptionType: i.subscriptionType,
           billingCycle: i.billingCycle,
+          listPriceAmount: i.listPriceAmount?.toString() ?? null,
           priceAmount: i.priceAmount?.toString() ?? null,
           priceCurrency: i.priceCurrency ?? null,
+          discountPercent: i.discountPercent ?? null,
           currentPeriodStartAt: i.currentPeriodStartAt,
           currentPeriodEndAt: i.currentPeriodEndAt,
           graceEndsAt: i.graceEndsAt,
@@ -203,8 +279,69 @@ export class OwnerController {
     };
   }
 
+  @Patch("tenants/:tenantId/partner-profile")
+  async updateTenantPartnerProfile(
+    @Req() req: { user: { id: string } },
+    @Param("tenantId") tenantId: string,
+    @Body() body?: { isPremiumPartner?: boolean; betaAccessEnabled?: boolean }
+  ) {
+    const now = new Date();
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    if (!tenant) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
+
+    const isPremiumPartner = typeof body?.isPremiumPartner === "boolean" ? body.isPremiumPartner : undefined;
+    const betaAccessEnabled = typeof body?.betaAccessEnabled === "boolean" ? body.betaAccessEnabled : undefined;
+
+    if (typeof isPremiumPartner !== "boolean" && typeof betaAccessEnabled !== "boolean") {
+      throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+    }
+
+    const updated = await this.prisma.tenantPartnerProfile.upsert({
+      where: { tenantId },
+      update: {
+        ...(typeof isPremiumPartner === "boolean"
+          ? isPremiumPartner
+            ? { isPremiumPartner: true, premiumGrantedAt: now, premiumGrantedByUserId: req.user.id }
+            : { isPremiumPartner: false, premiumGrantedAt: null, premiumGrantedByUserId: null }
+          : {}),
+        ...(typeof betaAccessEnabled === "boolean"
+          ? betaAccessEnabled
+            ? { betaAccessEnabled: true, betaEnabledAt: now, betaEnabledByUserId: req.user.id }
+            : { betaAccessEnabled: false, betaEnabledAt: null, betaEnabledByUserId: null }
+          : {})
+      },
+      create: {
+        tenantId,
+        isPremiumPartner: isPremiumPartner ?? false,
+        premiumGrantedAt: isPremiumPartner ? now : null,
+        premiumGrantedByUserId: isPremiumPartner ? req.user.id : null,
+        betaAccessEnabled: betaAccessEnabled ?? false,
+        betaEnabledAt: betaAccessEnabled ? now : null,
+        betaEnabledByUserId: betaAccessEnabled ? req.user.id : null
+      },
+      select: { isPremiumPartner: true, premiumGrantedAt: true, betaAccessEnabled: true, betaEnabledAt: true }
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorUserId: req.user.id,
+        action: "owner.partnerProfile.update",
+        entityType: "tenant",
+        entityId: tenantId,
+        metadataJson: { isPremiumPartner: isPremiumPartner ?? null, betaAccessEnabled: betaAccessEnabled ?? null }
+      }
+    });
+
+    return { data: { success: true, partnerProfile: updated } };
+  }
+
   @Post("tenants/:tenantId/memberships")
-  async addMembership(@Req() req: { user: { id: string } }, @Param("tenantId") tenantId: string, @Body() body: AddMembershipDto) {
+  async addMembership(
+    @Req() req: { user: { id: string }; headers?: Record<string, unknown> },
+    @Param("tenantId") tenantId: string,
+    @Body() body: AddMembershipDto
+  ) {
     const email = body.email.trim().toLowerCase();
     const fullName = (body.fullName ?? "").trim();
     const roleName = body.roleName;
@@ -215,6 +352,7 @@ export class OwnerController {
     const role = await this.prisma.role.findFirst({ where: { tenantId, name: roleName }, select: { id: true, name: true } });
     if (!role) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
 
+    const publicWebBaseUrl = this.resolvePublicWebBaseUrl(req.headers);
     const result = await this.prisma.$transaction(async (tx) => {
       const existingUser = await tx.user.findUnique({ where: { email }, select: { id: true, fullName: true, email: true } });
       const user = existingUser
@@ -250,7 +388,6 @@ export class OwnerController {
       const tokenHash = createHash("sha256").update(token).digest("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await tx.passwordResetToken.create({ data: { userId: user.id, tenantId, tokenHash, expiresAt } });
-      const publicWebBaseUrl = (process.env.PUBLIC_WEB_URL ?? process.env.PUBLIC_WEB_BASE_URL ?? "http://localhost:3000").trim().replace(/\/+$/, "");
       const inviteUrl = `${publicWebBaseUrl}/invite?token=${token}`;
 
       return { user, inviteUrl };
@@ -269,11 +406,39 @@ export class OwnerController {
         moduleId: true,
         status: true,
         startedAt: true,
+        activationRequestTracking: {
+          select: {
+            status: true,
+            requestedAt: true,
+            paymentReceivedAt: true,
+            activatedAt: true,
+            rejectedAt: true,
+            paymentNotes: true,
+            activationNotes: true,
+            confirmedByUserId: true
+          }
+        },
         tenant: { select: { slug: true, displayName: true, legalName: true } },
         module: { select: { id: true, nameKey: true, category: true, icon: true } }
       },
       orderBy: [{ startedAt: "desc" }, { id: "desc" }]
     });
+
+    const tenantIds = Array.from(new Set(items.map((i) => i.tenantId)));
+    const referrals = tenantIds.length
+      ? await this.prisma.referral.findMany({
+          where: { referredTenantId: { in: tenantIds } },
+          select: {
+            referredTenantId: true,
+            status: true,
+            source: true,
+            moduleId: true,
+            referrerCode: { select: { code: true } },
+            referrerTenant: { select: { slug: true, displayName: true } }
+          }
+        })
+      : [];
+    const referralByTenantId = new Map(referrals.map((r) => [r.referredTenantId, r]));
 
     return {
       data: items.map((i) => ({
@@ -287,8 +452,156 @@ export class OwnerController {
         moduleCategory: i.module.category,
         moduleIcon: i.module.icon,
         status: i.status,
-        requestedAt: i.startedAt
+        requestedAt: i.startedAt,
+        tracking: i.activationRequestTracking
+          ? {
+              status: i.activationRequestTracking.status,
+              requestedAt: i.activationRequestTracking.requestedAt,
+              paymentReceivedAt: i.activationRequestTracking.paymentReceivedAt,
+              activatedAt: i.activationRequestTracking.activatedAt,
+              rejectedAt: i.activationRequestTracking.rejectedAt,
+              paymentNotes: i.activationRequestTracking.paymentNotes,
+              activationNotes: i.activationRequestTracking.activationNotes
+            }
+          : null,
+        referral: (() => {
+          const r = referralByTenantId.get(i.tenantId);
+          if (!r) return null;
+          return {
+            status: r.status,
+            source: r.source,
+            moduleId: r.moduleId,
+            referrerCode: r.referrerCode.code,
+            referrerTenantSlug: r.referrerTenant?.slug ?? null,
+            referrerTenantDisplayName: r.referrerTenant?.displayName ?? null
+          };
+        })()
       }))
+    };
+  }
+
+  @Post("module-requests/:tenantId/:moduleId/payment-received")
+  async markModuleRequestPaymentReceived(
+    @Req() req: { user: { id: string } },
+    @Param("tenantId") tenantId: string,
+    @Param("moduleId") moduleId: string,
+    @Body() body?: { paymentNotes?: string }
+  ) {
+    const now = new Date();
+    const subscription = await this.prisma.subscription.findUnique({ where: { tenantId }, select: { id: true } });
+    if (!subscription) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
+
+    const item = await this.prisma.subscriptionItem.findUnique({
+      where: { tenantId_subscriptionId_moduleId: { tenantId, subscriptionId: subscription.id, moduleId } },
+      select: { id: true, status: true }
+    });
+    if (!item) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
+    if (item.status !== "requested") {
+      throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+    }
+
+    const paymentNotes = typeof body?.paymentNotes === "string" ? body.paymentNotes.trim() : "";
+
+    await this.prisma.activationRequestTracking.upsert({
+      where: { tenantId_moduleId: { tenantId, moduleId } },
+      update: {
+        status: "payment_received",
+        paymentReceivedAt: now,
+        paymentNotes: paymentNotes || null,
+        activatedAt: null,
+        rejectedAt: null,
+        confirmedByUserId: req.user.id,
+        subscriptionItemId: item.id
+      },
+      create: {
+        tenantId,
+        moduleId,
+        status: "payment_received",
+        paymentReceivedAt: now,
+        paymentNotes: paymentNotes || null,
+        confirmedByUserId: req.user.id,
+        subscriptionItemId: item.id
+      }
+    });
+
+    await this.prisma.referral.updateMany({
+      where: { referredTenantId: tenantId, status: { in: ["pending", "awaiting_payment_confirmation"] } },
+      data: { status: "payment_received", paymentReceivedAt: now }
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorUserId: req.user.id,
+        action: "owner.module.paymentReceived",
+        entityType: "module",
+        entityId: moduleId,
+        metadataJson: { paymentNotes: paymentNotes || null }
+      }
+    });
+
+    return { data: { success: true } };
+  }
+
+  @Get("referral-settings")
+  async getReferralSettings() {
+    const settings = await this.prisma.platformReferralSettings.upsert({
+      where: { id: "default" },
+      update: {},
+      create: { id: "default" }
+    });
+    return {
+      data: {
+        bundleStepPercent: settings.bundleStepPercent,
+        bundleMaxPercent: settings.bundleMaxPercent,
+        loyaltyExtraPercent: settings.loyaltyExtraPercent,
+        invoiceDiscountPercent: settings.invoiceDiscountPercent,
+        freeMonthAtReferrals: settings.freeMonthAtReferrals,
+        premiumPartnerAtReferrals: settings.premiumPartnerAtReferrals,
+        loyaltyExtraAtReferrals: settings.loyaltyExtraAtReferrals
+      }
+    };
+  }
+
+  @Patch("referral-settings")
+  async updateReferralSettings(@Req() req: { user: { id: string } }, @Body() body: UpdateReferralSettingsDto) {
+    const hasAny =
+      typeof body.bundleStepPercent === "number" ||
+      typeof body.bundleMaxPercent === "number" ||
+      typeof body.loyaltyExtraPercent === "number" ||
+      typeof body.invoiceDiscountPercent === "number" ||
+      typeof body.freeMonthAtReferrals === "number" ||
+      typeof body.premiumPartnerAtReferrals === "number" ||
+      typeof body.loyaltyExtraAtReferrals === "number";
+    if (!hasAny) throw new HttpException({ error: { code: "VALIDATION_ERROR", message_key: "errors.validationError" } }, 400);
+
+    const updated = await this.prisma.platformReferralSettings.upsert({
+      where: { id: "default" },
+      update: {
+        ...(typeof body.bundleStepPercent === "number" ? { bundleStepPercent: body.bundleStepPercent } : {}),
+        ...(typeof body.bundleMaxPercent === "number" ? { bundleMaxPercent: body.bundleMaxPercent } : {}),
+        ...(typeof body.loyaltyExtraPercent === "number" ? { loyaltyExtraPercent: body.loyaltyExtraPercent } : {}),
+        ...(typeof body.invoiceDiscountPercent === "number" ? { invoiceDiscountPercent: body.invoiceDiscountPercent } : {}),
+        ...(typeof body.freeMonthAtReferrals === "number" ? { freeMonthAtReferrals: body.freeMonthAtReferrals } : {}),
+        ...(typeof body.premiumPartnerAtReferrals === "number" ? { premiumPartnerAtReferrals: body.premiumPartnerAtReferrals } : {}),
+        ...(typeof body.loyaltyExtraAtReferrals === "number" ? { loyaltyExtraAtReferrals: body.loyaltyExtraAtReferrals } : {})
+      },
+      create: { id: "default", ...body }
+    });
+
+    return {
+      data: {
+        success: true,
+        settings: {
+          bundleStepPercent: updated.bundleStepPercent,
+          bundleMaxPercent: updated.bundleMaxPercent,
+          loyaltyExtraPercent: updated.loyaltyExtraPercent,
+          invoiceDiscountPercent: updated.invoiceDiscountPercent,
+          freeMonthAtReferrals: updated.freeMonthAtReferrals,
+          premiumPartnerAtReferrals: updated.premiumPartnerAtReferrals,
+          loyaltyExtraAtReferrals: updated.loyaltyExtraAtReferrals
+        }
+      }
     };
   }
 
@@ -300,6 +613,8 @@ export class OwnerController {
     @Body() body: ApproveModuleRequestDto
   ) {
     const now = new Date();
+    const paymentNotes = (body.paymentNotes ?? "").trim();
+    const activationNotes = (body.activationNotes ?? "").trim();
     const mod = await this.prisma.moduleCatalog.findUnique({ where: { id: moduleId }, select: { id: true, isActive: true } });
     if (!mod) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
     if (!mod.isActive) throw new HttpException({ error: { code: "MODULE_DISABLED", message_key: "errors.moduleDisabled" } }, 400);
@@ -311,8 +626,38 @@ export class OwnerController {
     const isMonthly = subscriptionType === "online_monthly";
     const billingCycle = isMonthly ? "monthly" : "one_time";
     const defaultAmount = subscriptionType === "online_monthly" ? "40" : subscriptionType === "offline_no_changes" ? "1000" : "2000";
-    const priceAmount = new Prisma.Decimal((body.priceAmount ?? defaultAmount).trim());
+    const listPriceAmount = new Prisma.Decimal((body.priceAmount ?? defaultAmount).trim());
     const priceCurrency = (body.priceCurrency ?? "USD").trim() || "USD";
+
+    const referralSettings = await this.prisma.platformReferralSettings.upsert({
+      where: { id: "default" },
+      update: {},
+      create: { id: "default" }
+    });
+    const activeCount = await this.prisma.subscriptionItem.count({ where: { tenantId, endedAt: null, status: "active" } });
+    const alreadyActive = await this.prisma.subscriptionItem.findFirst({
+      where: { tenantId, subscriptionId: subscription.id, moduleId, endedAt: null, status: "active" },
+      select: { id: true }
+    });
+    const afterCount = activeCount + (alreadyActive ? 0 : 1);
+    const bundleEligibleCount = Math.max(0, afterCount - 1);
+    const bundlePercent = Math.min(referralSettings.bundleMaxPercent, bundleEligibleCount * referralSettings.bundleStepPercent);
+    const referralForTenant = await this.prisma.referral.findFirst({
+      where: { referredTenantId: tenantId, status: { not: "rejected" } },
+      select: { id: true }
+    });
+    const isFirstActivation = activeCount === 0 && !alreadyActive;
+    const firstActivationPercent = isFirstActivation ? (referralForTenant ? 10 : 5) : 0;
+    const hasLoyaltyExtra = await this.prisma.referralRewardGrant.findFirst({
+      where: { tenantId, rewardType: "loyalty_extra_5" },
+      select: { id: true }
+    });
+    const loyaltyPercent = hasLoyaltyExtra ? referralSettings.loyaltyExtraPercent : 0;
+    const discountPercent = bundlePercent + loyaltyPercent + firstActivationPercent;
+    const priceAmount =
+      discountPercent > 0
+        ? listPriceAmount.mul(new Prisma.Decimal(100 - discountPercent)).div(new Prisma.Decimal(100)).toDecimalPlaces(2)
+        : listPriceAmount;
 
     const currentPeriodStartAt = isMonthly ? now : null;
     const configuredPeriodEnd = isMonthly ? parseIsoDateOrNull(body.currentPeriodEndAt) : null;
@@ -328,8 +673,10 @@ export class OwnerController {
           endedAt: null,
           subscriptionType,
           billingCycle,
+          listPriceAmount,
           priceAmount,
           priceCurrency,
+          discountPercent,
           currentPeriodStartAt,
           currentPeriodEndAt,
           graceEndsAt,
@@ -345,8 +692,10 @@ export class OwnerController {
           status: "active",
           subscriptionType,
           billingCycle,
+          listPriceAmount,
           priceAmount,
           priceCurrency,
+          discountPercent,
           currentPeriodStartAt: currentPeriodStartAt ?? undefined,
           currentPeriodEndAt: currentPeriodEndAt ?? undefined,
           graceEndsAt: graceEndsAt ?? undefined,
@@ -369,10 +718,44 @@ export class OwnerController {
           action: "owner.module.approve",
           entityType: "module",
           entityId: moduleId,
-          metadataJson: { subscriptionType, billingCycle, priceAmount: priceAmount.toString(), priceCurrency }
+          metadataJson: {
+            subscriptionType,
+            billingCycle,
+            listPriceAmount: listPriceAmount.toString(),
+            priceAmount: priceAmount.toString(),
+            priceCurrency,
+            discountPercent,
+            firstActivationPercent,
+            bundlePercent,
+            loyaltyPercent
+          }
         }
       });
     });
+
+    await this.prisma.activationRequestTracking.upsert({
+      where: { tenantId_moduleId: { tenantId, moduleId } },
+      update: {
+        status: "activated",
+        activatedAt: now,
+        paymentReceivedAt: now,
+        ...(paymentNotes ? { paymentNotes } : {}),
+        ...(activationNotes ? { activationNotes } : {}),
+        confirmedByUserId: req.user.id,
+        rejectedAt: null
+      },
+      create: {
+        tenantId,
+        moduleId,
+        status: "activated",
+        activatedAt: now,
+        paymentReceivedAt: now,
+        paymentNotes: paymentNotes || null,
+        activationNotes: activationNotes || null,
+        confirmedByUserId: req.user.id
+      }
+    });
+    await this.handleReferralAfterModuleActivation({ tenantId, moduleId, now, actorUserId: req.user.id });
 
     const membershipsWithExplicitModules = await this.prisma.membership.findMany({
       where: { tenantId, status: "active", enabledModules: { some: {} }, role: { is: { name: { not: "Owner" } } } },
@@ -435,6 +818,16 @@ export class OwnerController {
       }
     });
 
+    await this.prisma.activationRequestTracking.upsert({
+      where: { tenantId_moduleId: { tenantId, moduleId } },
+      update: { status: "rejected", rejectedAt: new Date(), activationNotes: body.reason?.trim() || null, confirmedByUserId: req.user.id },
+      create: { tenantId, moduleId, status: "rejected", rejectedAt: new Date(), activationNotes: body.reason?.trim() || null, confirmedByUserId: req.user.id }
+    });
+    await this.prisma.referral.updateMany({
+      where: { referredTenantId: tenantId, status: { in: ["pending", "awaiting_payment_confirmation", "payment_received", "activated"] } },
+      data: { status: "rejected", rejectedAt: new Date(), rejectedReason: body.reason?.trim() || null }
+    });
+
     return { data: { success: true } };
   }
 
@@ -446,6 +839,8 @@ export class OwnerController {
     @Body() body: ApproveModuleRequestDto
   ) {
     const now = new Date();
+    const paymentNotes = (body.paymentNotes ?? "").trim();
+    const activationNotes = (body.activationNotes ?? "").trim();
     const mod = await this.prisma.moduleCatalog.findUnique({ where: { id: moduleId }, select: { id: true, isActive: true } });
     if (!mod) throw new HttpException({ error: { code: "NOT_FOUND", message_key: "errors.notFound" } }, 404);
     if (!mod.isActive) throw new HttpException({ error: { code: "MODULE_DISABLED", message_key: "errors.moduleDisabled" } }, 400);
@@ -457,8 +852,38 @@ export class OwnerController {
     const isMonthly = subscriptionType === "online_monthly";
     const billingCycle = isMonthly ? "monthly" : "one_time";
     const defaultAmount = subscriptionType === "online_monthly" ? "40" : subscriptionType === "offline_no_changes" ? "1000" : "2000";
-    const priceAmount = new Prisma.Decimal((body.priceAmount ?? defaultAmount).trim());
+    const listPriceAmount = new Prisma.Decimal((body.priceAmount ?? defaultAmount).trim());
     const priceCurrency = (body.priceCurrency ?? "USD").trim() || "USD";
+
+    const referralSettings = await this.prisma.platformReferralSettings.upsert({
+      where: { id: "default" },
+      update: {},
+      create: { id: "default" }
+    });
+    const activeCount = await this.prisma.subscriptionItem.count({ where: { tenantId, endedAt: null, status: "active" } });
+    const alreadyActive = await this.prisma.subscriptionItem.findFirst({
+      where: { tenantId, subscriptionId: subscription.id, moduleId, endedAt: null, status: "active" },
+      select: { id: true }
+    });
+    const afterCount = activeCount + (alreadyActive ? 0 : 1);
+    const bundleEligibleCount = Math.max(0, afterCount - 1);
+    const bundlePercent = Math.min(referralSettings.bundleMaxPercent, bundleEligibleCount * referralSettings.bundleStepPercent);
+    const referralForTenant = await this.prisma.referral.findFirst({
+      where: { referredTenantId: tenantId, status: { not: "rejected" } },
+      select: { id: true }
+    });
+    const isFirstActivation = activeCount === 0 && !alreadyActive;
+    const firstActivationPercent = isFirstActivation ? (referralForTenant ? 10 : 5) : 0;
+    const hasLoyaltyExtra = await this.prisma.referralRewardGrant.findFirst({
+      where: { tenantId, rewardType: "loyalty_extra_5" },
+      select: { id: true }
+    });
+    const loyaltyPercent = hasLoyaltyExtra ? referralSettings.loyaltyExtraPercent : 0;
+    const discountPercent = bundlePercent + loyaltyPercent + firstActivationPercent;
+    const priceAmount =
+      discountPercent > 0
+        ? listPriceAmount.mul(new Prisma.Decimal(100 - discountPercent)).div(new Prisma.Decimal(100)).toDecimalPlaces(2)
+        : listPriceAmount;
 
     const currentPeriodStartAt = isMonthly ? now : null;
     const configuredPeriodEnd = isMonthly ? parseIsoDateOrNull(body.currentPeriodEndAt) : null;
@@ -474,8 +899,10 @@ export class OwnerController {
           endedAt: null,
           subscriptionType,
           billingCycle,
+          listPriceAmount,
           priceAmount,
           priceCurrency,
+          discountPercent,
           currentPeriodStartAt,
           currentPeriodEndAt,
           graceEndsAt,
@@ -491,8 +918,10 @@ export class OwnerController {
           status: "active",
           subscriptionType,
           billingCycle,
+          listPriceAmount,
           priceAmount,
           priceCurrency,
+          discountPercent,
           currentPeriodStartAt: currentPeriodStartAt ?? undefined,
           currentPeriodEndAt: currentPeriodEndAt ?? undefined,
           graceEndsAt: graceEndsAt ?? undefined,
@@ -515,10 +944,44 @@ export class OwnerController {
           action: "owner.subscription.activate",
           entityType: "module",
           entityId: moduleId,
-          metadataJson: { subscriptionType, billingCycle, priceAmount: priceAmount.toString(), priceCurrency }
+          metadataJson: {
+            subscriptionType,
+            billingCycle,
+            listPriceAmount: listPriceAmount.toString(),
+            priceAmount: priceAmount.toString(),
+            priceCurrency,
+            discountPercent,
+            firstActivationPercent,
+            bundlePercent,
+            loyaltyPercent
+          }
         }
       });
     });
+
+    await this.prisma.activationRequestTracking.upsert({
+      where: { tenantId_moduleId: { tenantId, moduleId } },
+      update: {
+        status: "activated",
+        activatedAt: now,
+        paymentReceivedAt: now,
+        ...(paymentNotes ? { paymentNotes } : {}),
+        ...(activationNotes ? { activationNotes } : {}),
+        confirmedByUserId: req.user.id,
+        rejectedAt: null
+      },
+      create: {
+        tenantId,
+        moduleId,
+        status: "activated",
+        activatedAt: now,
+        paymentReceivedAt: now,
+        paymentNotes: paymentNotes || null,
+        activationNotes: activationNotes || null,
+        confirmedByUserId: req.user.id
+      }
+    });
+    await this.handleReferralAfterModuleActivation({ tenantId, moduleId, now, actorUserId: req.user.id });
 
     const membershipsWithExplicitModules = await this.prisma.membership.findMany({
       where: { tenantId, status: "active", enabledModules: { some: {} }, role: { is: { name: { not: "Owner" } } } },
@@ -1247,6 +1710,104 @@ export class OwnerController {
       })),
       meta: { page, pageSize, total }
     };
+  }
+
+  private async handleReferralAfterModuleActivation(args: { tenantId: string; moduleId: string; now: Date; actorUserId: string }) {
+    const referral = await this.prisma.referral.findUnique({
+      where: { referredTenantId: args.tenantId },
+      select: { id: true, referrerTenantId: true, activatedAt: true, paymentReceivedAt: true, rewardGrantedAt: true, moduleRequestedAt: true, status: true }
+    });
+    if (!referral) return;
+    if (!referral.referrerTenantId) return;
+
+    const settings = await this.prisma.platformReferralSettings.upsert({
+      where: { id: "default" },
+      update: {},
+      create: { id: "default" }
+    });
+
+    await this.prisma.referral.update({
+      where: { id: referral.id },
+      data: {
+        moduleId: args.moduleId,
+        moduleRequestedAt: referral.moduleRequestedAt ?? args.now,
+        paymentReceivedAt: referral.paymentReceivedAt ?? args.now,
+        activatedAt: referral.activatedAt ?? args.now,
+        status: referral.rewardGrantedAt ? "reward_granted" : "activated"
+      }
+    });
+
+    const successfulReferrals = await this.prisma.referral.count({
+      where: { referrerTenantId: referral.referrerTenantId, activatedAt: { not: null } }
+    });
+
+    const rewardRows: Array<{ tenantId: string; rewardType: "invoice_discount_10" | "free_month" | "premium_partner" | "loyalty_extra_5"; grantedAt: Date; grantedByUserId: string; metadataJson: Prisma.JsonObject }> = [];
+
+    if (successfulReferrals >= 1) {
+      rewardRows.push({
+        tenantId: referral.referrerTenantId,
+        rewardType: "invoice_discount_10",
+        grantedAt: args.now,
+        grantedByUserId: args.actorUserId,
+        metadataJson: { milestone: 1, invoiceDiscountPercent: settings.invoiceDiscountPercent }
+      });
+    }
+    if (successfulReferrals >= settings.freeMonthAtReferrals) {
+      rewardRows.push({
+        tenantId: referral.referrerTenantId,
+        rewardType: "free_month",
+        grantedAt: args.now,
+        grantedByUserId: args.actorUserId,
+        metadataJson: { milestone: settings.freeMonthAtReferrals }
+      });
+    }
+    if (successfulReferrals >= settings.premiumPartnerAtReferrals) {
+      rewardRows.push({
+        tenantId: referral.referrerTenantId,
+        rewardType: "premium_partner",
+        grantedAt: args.now,
+        grantedByUserId: args.actorUserId,
+        metadataJson: { milestone: settings.premiumPartnerAtReferrals }
+      });
+      await this.prisma.tenantPartnerProfile.upsert({
+        where: { tenantId: referral.referrerTenantId },
+        update: { isPremiumPartner: true, premiumGrantedAt: args.now, premiumGrantedByUserId: args.actorUserId },
+        create: { tenantId: referral.referrerTenantId, isPremiumPartner: true, premiumGrantedAt: args.now, premiumGrantedByUserId: args.actorUserId }
+      });
+    }
+    if (successfulReferrals >= settings.loyaltyExtraAtReferrals) {
+      rewardRows.push({
+        tenantId: referral.referrerTenantId,
+        rewardType: "loyalty_extra_5",
+        grantedAt: args.now,
+        grantedByUserId: args.actorUserId,
+        metadataJson: { milestone: settings.loyaltyExtraAtReferrals, loyaltyExtraPercent: settings.loyaltyExtraPercent }
+      });
+    }
+
+    let createdRewards = 0;
+    if (rewardRows.length > 0) {
+      const created = await this.prisma.referralRewardGrant.createMany({ data: rewardRows, skipDuplicates: true });
+      createdRewards = created.count;
+    }
+
+    if (createdRewards > 0) {
+      await this.prisma.referral.update({
+        where: { id: referral.id },
+        data: { status: "reward_granted", rewardGrantedAt: args.now }
+      });
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        tenantId: referral.referrerTenantId,
+        actorUserId: args.actorUserId,
+        action: "referral.reward.evaluate",
+        entityType: "referral",
+        entityId: referral.id,
+        metadataJson: { successfulReferrals, createdRewards }
+      }
+    });
   }
 }
 

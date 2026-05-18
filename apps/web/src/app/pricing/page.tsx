@@ -2,6 +2,7 @@ import { getApiBaseUrl } from "@/lib/api";
 import { getRequestLocale } from "@/lib/locale";
 import { t as translate } from "@oneerp/i18n";
 import { Reveal } from "@/components/Reveal";
+import type { ReactNode } from "react";
 
 type PublicPlan = {
   code: string;
@@ -38,6 +39,18 @@ function PricingView(props: { t: (key: string) => string; plans: PublicPlan[] })
           </div>
         </section>
       </Reveal>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <Reveal delayMs={0}>
+          <PromoCard t={props.t} icon={<SparkIcon />} title={props.t("public.discounts.businessGrowthOffer")} desc={props.t("public.pricing.promo.default5")} />
+        </Reveal>
+        <Reveal delayMs={70}>
+          <PromoCard t={props.t} icon={<LinkIcon />} title={props.t("public.pricing.promo.referralTitle")} desc={props.t("public.pricing.promo.referral10")} />
+        </Reveal>
+        <Reveal delayMs={140}>
+          <PromoCard t={props.t} icon={<StackIcon />} title={props.t("public.pricing.promo.bundleTitle")} desc={props.t("public.discounts.bundleNote")} />
+        </Reveal>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         {plans.map((p, idx) => (
@@ -235,6 +248,49 @@ function planIcon(code: string) {
       <path d="M12 3l8 5v8l-8 5-8-5V8l8-5Z" stroke="currentColor" strokeWidth="1.5" />
       <path d="M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       <path d="M8.5 12h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PromoCard(props: { t: (key: string) => string; icon: ReactNode; title: string; desc: string }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-card transition hover:-translate-y-0.5 hover:shadow-lg">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
+          {props.icon}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-gray-900">{props.title}</div>
+          <div className="mt-1 text-sm text-gray-700">{props.desc}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2l1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5L12 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M10 13a5 5 0 0 1 0-7l.8-.8a5 5 0 0 1 7.1 7.1l-.8.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M14 11a5 5 0 0 1 0 7l-.8.8a5 5 0 0 1-7.1-7.1l.8-.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function StackIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3l9 5-9 5-9-5 9-5Z" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 12l9 5 9-5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 16l9 5 9-5" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }

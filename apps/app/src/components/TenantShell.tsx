@@ -18,6 +18,7 @@ export function TenantShell(props: { tenantSlug: string; dir: "ltr" | "rtl"; chi
     if (pathname.includes(`/t/${props.tenantSlug}/modules`)) return t("app.nav.modules");
     if (pathname.includes(`/t/${props.tenantSlug}/onboarding`)) return t("app.nav.onboarding");
     if (pathname.includes(`/t/${props.tenantSlug}/team`)) return t("app.nav.team");
+    if (pathname.includes(`/t/${props.tenantSlug}/support-center`)) return t("app.nav.supportCenter");
     return props.tenantSlug;
   }, [pathname, props.tenantSlug, t]);
 

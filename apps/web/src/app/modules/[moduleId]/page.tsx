@@ -40,6 +40,36 @@ function pick(locale: "en" | "fa" | "ps", obj: { title_en: string; title_dr: str
   return obj.title_en;
 }
 
+function PricingBox(props: { t: (key: string) => string; label: string; listAmount: number; suffix: string; primaryPercent: number; secondaryPercent: number; note?: string }) {
+  const primary = Number.isFinite(props.primaryPercent) ? Math.max(0, Math.min(25, props.primaryPercent)) : 0;
+  const secondary = Number.isFinite(props.secondaryPercent) ? Math.max(0, Math.min(25, props.secondaryPercent)) : 0;
+  const discounted = primary > 0 ? props.listAmount * ((100 - primary) / 100) : props.listAmount;
+  const savings = Math.max(0, props.listAmount - discounted);
+  const discountedReferral = secondary > primary ? props.listAmount * ((100 - secondary) / 100) : discounted;
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
+      <div className="text-sm text-gray-700">{props.label}</div>
+      {primary > 0 ? (
+        <div className="mt-2 text-sm text-gray-500 line-through tabular">
+          {formatUsd(props.listAmount)} {props.suffix}
+        </div>
+      ) : null}
+      <div className="mt-2 text-xl font-semibold text-gray-900 tabular">
+        {formatUsd(discounted)} {props.suffix}
+      </div>
+      {primary > 0 ? <div className="mt-2 text-sm text-emerald-700">{`${props.t("public.discounts.smartSavings")}: -${formatUsd(savings)}`}</div> : null}
+      {secondary > primary ? <div className="mt-2 text-sm text-primary-700">{`${props.t("public.discounts.withReferral")} ${formatUsd(discountedReferral)} ${props.suffix}`}</div> : null}
+      {props.note ? <div className="mt-2 text-sm text-gray-700">{props.note}</div> : null}
+    </div>
+  );
+}
+
+function formatUsd(amount: number): string {
+  const v = Number.isFinite(amount) ? amount : 0;
+  const fixed = v % 1 === 0 ? v.toFixed(0) : v.toFixed(2);
+  return `$${fixed}`;
+}
+
 async function fetchModule(moduleId: string): Promise<PublicModule | null> {
   const apiBase = getApiBaseUrl();
   const res = await fetch(joinUrl(apiBase, "/api/public/modules"), { cache: "no-store" });
@@ -142,19 +172,23 @@ export default async function PublicModuleDetailPage(props: { params: Promise<{ 
       <Reveal>
         <section className="rounded-2xl border border-gray-200 bg-white p-8 shadow-card">
           <h2 className="text-xl font-semibold">{t("public.module.pricingTitle")}</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
-            {[
-              { label: t("common.pricing.online.label"), value: t("common.pricing.online.value") },
-              { label: t("common.pricing.desktopNoChanges.label"), value: t("common.pricing.desktopNoChanges.value") },
-              { label: t("common.pricing.desktopWithChanges.label"), value: t("common.pricing.desktopWithChanges.value") }
-            ].map((x) => (
-              <div key={x.label} className="rounded-2xl border border-gray-200 bg-gray-50 p-6">
-                <div className="text-sm text-gray-700">{x.label}</div>
-                <div className="mt-2 text-xl font-semibold text-gray-900">{x.value}</div>
-                {x.label === t("common.pricing.desktopWithChanges.label") ? <div className="mt-2 text-sm text-gray-700">{t("common.pricing.changesPeriod")}</div> : null}
-              </div>
-            ))}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900">
+              {t("public.discounts.businessGrowthOffer")} • {t("public.discounts.save")} 5%
+            </span>
+            <span className="inline-flex items-center rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-800">
+              {t("public.discounts.useReferral")} 10%
+            </span>
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800">
+              {t("public.pricing.bundleSavingsLabel")} {t("public.pricing.saveUpTo25")}
+            </span>
           </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <PricingBox t={t} label={t("common.pricing.online.label")} listAmount={40} suffix={t("public.pricing.perMonth")} primaryPercent={5} secondaryPercent={10} />
+            <PricingBox t={t} label={t("common.pricing.desktopNoChanges.label")} listAmount={1000} suffix={t("public.pricing.oneTime")} primaryPercent={5} secondaryPercent={10} />
+            <PricingBox t={t} label={t("common.pricing.desktopWithChanges.label")} listAmount={2000} suffix={t("public.pricing.oneTime")} primaryPercent={5} secondaryPercent={10} note={t("common.pricing.changesPeriod")} />
+          </div>
+          <div className="mt-4 text-sm text-gray-700">{t("public.discounts.bundleNote")}</div>
         </section>
       </Reveal>
 

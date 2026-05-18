@@ -37,6 +37,9 @@ export function OnboardingClient(props: { tenantSlug: string }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [referralCode, setReferralCode] = useState("");
+  const [applyingReferral, setApplyingReferral] = useState(false);
+  const [referralApplied, setReferralApplied] = useState(false);
 
   const apiBase = getApiBaseUrl();
   const logoFullUrl = useMemo(() => (logoUrl ? `${apiBase}${logoUrl}` : null), [apiBase, logoUrl]);
@@ -235,6 +238,47 @@ export function OnboardingClient(props: { tenantSlug: string }) {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-card md:p-6">
+        <div className="text-lg font-semibold">{t("app.onboarding.referral.title")}</div>
+        <div className="mt-2 text-sm text-gray-700">{t("app.onboarding.referral.subtitle")}</div>
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="flex-1">
+            <Field label={t("app.onboarding.referral.field.code")} value={referralCode} onChange={setReferralCode} />
+          </div>
+          <button
+            type="button"
+            disabled={applyingReferral || !referralCode.trim()}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-gray-900 px-4 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+            onClick={async () => {
+              if (!referralCode.trim()) return;
+              setApplyingReferral(true);
+              setErrorKey(null);
+              try {
+                const res = await apiFetch(`/api/referrals/apply`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "X-Tenant-Id": tenantId },
+                  body: JSON.stringify({ code: referralCode })
+                });
+                if (!res.ok) {
+                  setErrorKey("errors.validationError");
+                  return;
+                }
+                setReferralApplied(true);
+              } catch {
+                setErrorKey("errors.internal");
+              } finally {
+                setApplyingReferral(false);
+              }
+            }}
+          >
+            {applyingReferral ? t("common.loading") : t("app.onboarding.referral.apply")}
+          </button>
+        </div>
+        {referralApplied ? (
+          <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">{t("app.onboarding.referral.appliedDiscount")}</div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6">

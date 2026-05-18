@@ -4,6 +4,10 @@ import * as tls from "tls";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PublicContactDto, WaitlistDto } from "./dto/waitlist.dto";
 
+function normalizeReferralCode(raw: string): string {
+  return raw.trim().replace(/\s+/g, "").toUpperCase();
+}
+
 @Controller("public")
 export class PublicController {
   constructor(private readonly prisma: PrismaService) {}
@@ -79,6 +83,22 @@ export class PublicController {
         is_active: p.isActive
       }))
     };
+  }
+
+  @Get("referral-codes/validate")
+  async validateReferralCode(@Query("code") codeRaw?: string) {
+    const defaultPercent = 5;
+    const referralPercent = 10;
+    const code = normalizeReferralCode(typeof codeRaw === "string" ? codeRaw : "");
+    if (!code) return { data: { valid: false, discountPercent: defaultPercent, defaultPercent, referralPercent } };
+
+    const referrer = await this.prisma.referralCode.findUnique({
+      where: { code },
+      select: { id: true, isActive: true }
+    });
+    if (!referrer || !referrer.isActive) return { data: { valid: false, discountPercent: defaultPercent, defaultPercent, referralPercent } };
+
+    return { data: { valid: true, discountPercent: referralPercent, defaultPercent, referralPercent } };
   }
 
   @Post("waitlist")

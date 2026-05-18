@@ -40,6 +40,16 @@ function parseDurationSeconds(raw: string | undefined, fallbackSeconds: number):
 
 type Tx = Prisma.TransactionClient | PrismaService;
 
+function normalizeReferralCode(raw: string): string {
+  return raw.trim().replace(/\s+/g, "").toUpperCase();
+}
+
+function makeCandidateReferralCode(prefix: string): string {
+  const clean = prefix.replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  const suffix = String(Math.floor(1000 + Math.random() * 9000));
+  return `${clean || "ONEERP"}-${suffix}`;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -111,6 +121,21 @@ export class AuthService {
             trialEndsAt
           }
         });
+
+        await tx.tenantPartnerProfile.create({ data: { tenantId: tenant.id } });
+
+        await this.ensureReferralCodesForNewTenant(tx, {
+          tenantId: tenant.id,
+          tenantSlug: tenant.slug,
+          userId: user.id,
+          userFullName: user.fullName
+        });
+
+        const rawReferralCode = typeof input.referralCode === "string" ? input.referralCode : "";
+        const referralCode = normalizeReferralCode(rawReferralCode);
+        if (referralCode) {
+          await this.applyReferralCodeForTenant(tx, { tenantId: tenant.id, userId: user.id, referralCode, source: "registration" });
+        }
 
         await tx.auditLog.createMany({
           data: [
@@ -331,6 +356,82 @@ export class AuthService {
 
   private hashToken(value: string): string {
     return createHash("sha256").update(value).digest("hex");
+  }
+
+  private async ensureReferralCodesForNewTenant(
+    tx: Prisma.TransactionClient,
+    args: { tenantId: string; tenantSlug: string; userId: string; userFullName: string }
+  ) {
+    await Promise.all([
+      this.ensureReferralCode(tx, { tenantId: args.tenantId, prefix: args.tenantSlug }),
+      this.ensureReferralCode(tx, { userId: args.userId, prefix: args.userFullName })
+    ]);
+  }
+
+  private async ensureReferralCode(
+    tx: Prisma.TransactionClient,
+    args: { tenantId?: string; userId?: string; prefix: string }
+  ): Promise<void> {
+    if (!args.tenantId && !args.userId) return;
+    const existing = await tx.referralCode.findFirst({
+      where: { ...(args.tenantId ? { tenantId: args.tenantId } : {}), ...(args.userId ? { userId: args.userId } : {}) },
+      select: { id: true }
+    });
+    if (existing) return;
+
+    const prefix = normalizeReferralCode(args.prefix);
+    for (let i = 0; i < 12; i += 1) {
+      const code = makeCandidateReferralCode(prefix);
+      try {
+        await tx.referralCode.create({ data: { code, tenantId: args.tenantId, userId: args.userId } });
+        return;
+      } catch (err) {
+        if (!this.isPrismaUniqueViolation(err)) throw err;
+      }
+    }
+    await tx.referralCode.create({
+      data: { code: `ONEERP-${randomBytes(4).toString("hex").toUpperCase()}`, tenantId: args.tenantId, userId: args.userId }
+    });
+  }
+
+  private async applyReferralCodeForTenant(
+    tx: Prisma.TransactionClient,
+    args: { tenantId: string; userId: string; referralCode: string; source: string }
+  ) {
+    const existing = await tx.referral.findUnique({ where: { referredTenantId: args.tenantId }, select: { id: true } });
+    if (existing) return;
+
+    const referrer = await tx.referralCode.findUnique({
+      where: { code: args.referralCode },
+      select: { id: true, isActive: true, tenantId: true, userId: true }
+    });
+    if (!referrer || !referrer.isActive) return;
+    if (referrer.tenantId === args.tenantId || referrer.userId === args.userId) return;
+
+    const derivedTenantId =
+      referrer.tenantId ??
+      (referrer.userId
+        ? (
+            await tx.membership.findFirst({
+              where: { userId: referrer.userId, status: "active" },
+              select: { tenantId: true },
+              orderBy: { createdAt: "asc" }
+            })
+          )?.tenantId ??
+          null
+        : null);
+
+    await tx.referral.create({
+      data: {
+        referrerCodeId: referrer.id,
+        referrerTenantId: derivedTenantId ?? undefined,
+        referrerUserId: referrer.userId ?? undefined,
+        referredTenantId: args.tenantId,
+        referredUserId: args.userId,
+        source: args.source,
+        status: "pending"
+      }
+    });
   }
 
   private isPrismaUniqueViolation(err: unknown): boolean {

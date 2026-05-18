@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 import { RequestIdInterceptor } from "./shared/request-id.interceptor";
 import { ApiExceptionFilter } from "./shared/api-exception.filter";
+import { SocketIoAdapter } from "./shared/socket-io.adapter";
 
 function isAllowedOrigin(origin: string, allowList: string[]): boolean {
   const normalized = origin.trim();
@@ -73,6 +74,7 @@ async function bootstrap() {
   );
   app.useGlobalInterceptors(new RequestIdInterceptor());
   app.useGlobalFilters(new ApiExceptionFilter());
+  app.useWebSocketAdapter(new SocketIoAdapter(app, allowedOrigins));
 
   const port = Number(process.env.PORT ?? 4000);
   await app.listen(port);

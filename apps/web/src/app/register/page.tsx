@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supportedLocales, type Locale } from "@oneerp/i18n";
 import { useClientI18n } from "@/lib/client-i18n";
 import { getApiBaseUrl } from "@/lib/api";
@@ -10,9 +11,11 @@ import type { ApiError, RegisterRequest, RegisterResponse } from "@oneerp/types"
 import { HeroGraphic, IconGlobe, IconPuzzle, IconShield } from "@/components/Graphics";
 
 type Step = "account" | "company";
+type ReferralValidateResponse = { data: { valid: boolean; discountPercent: number; defaultPercent: number; referralPercent: number } };
 
 export default function RegisterPage() {
   const { t, locale: currentLocale } = useClientI18n();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("account");
 
   const [fullName, setFullName] = useState("");
@@ -29,12 +32,46 @@ export default function RegisterPage() {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [companyEmail, setCompanyEmail] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [referralValidate, setReferralValidate] = useState<ReferralValidateResponse["data"] | null>(null);
+  const [checkingReferral, setCheckingReferral] = useState(false);
 
   const [fieldError, setFieldError] = useState<Record<string, string>>({});
   const [apiErrorKey, setApiErrorKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const effectiveSlug = slug.trim().length ? slug : suggestedSlug;
+
+  useEffect(() => {
+    const raw = (searchParams.get("ref") ?? "").trim();
+    if (!raw) return;
+    setReferralCode((prev) => (prev.trim().length ? prev : raw));
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const handle = window.setTimeout(async () => {
+      const raw = referralCode.trim();
+      setCheckingReferral(true);
+      try {
+        const res = await fetch(`${getApiBaseUrl()}/api/public/referral-codes/validate?code=${encodeURIComponent(raw)}`, { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setReferralValidate(null);
+          return;
+        }
+        const json = (await res.json()) as ReferralValidateResponse;
+        if (!cancelled) setReferralValidate(json.data);
+      } catch {
+        if (!cancelled) setReferralValidate(null);
+      } finally {
+        if (!cancelled) setCheckingReferral(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [referralCode]);
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-2 md:items-stretch">
@@ -160,7 +197,8 @@ export default function RegisterPage() {
                     address: address || undefined,
                     phone: phone || undefined,
                     email: companyEmail || undefined
-                  }
+                  },
+                  referralCode: referralCode.trim() || undefined
                 };
 
                 const res = await fetch(`${getApiBaseUrl()}/api/auth/register`, {
@@ -240,6 +278,39 @@ export default function RegisterPage() {
                 ))}
               </select>
             </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm font-semibold text-amber-900">{t("auth.register.offer.title")}</div>
+              <div className="mt-2 text-sm text-amber-900/80">{t("auth.register.offer.default")}</div>
+              <div className="mt-1 text-sm text-amber-900/80">{t("auth.register.offer.referral")}</div>
+              <div className="mt-1 text-sm text-amber-900/80">{t("auth.register.offer.bundle")}</div>
+            </div>
+
+            <Field
+              label={t("auth.register.referralCode.label")}
+              placeholder={t("auth.register.referralCode.placeholder")}
+              value={referralCode}
+              onChange={setReferralCode}
+            />
+            {referralValidate ? (
+              referralCode.trim() ? (
+                referralValidate.valid ? (
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+                    {t("auth.register.referralCode.valid")} {referralValidate.referralPercent}%
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                    {t("auth.register.referralCode.invalid")} {referralValidate.defaultPercent}%
+                  </div>
+                )
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                  {t("auth.register.referralCode.default")} {referralValidate.defaultPercent}%
+                </div>
+              )
+            ) : checkingReferral ? (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">{t("common.loading")}</div>
+            ) : null}
 
             <button
               type="button"

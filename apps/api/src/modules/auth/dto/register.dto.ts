@@ -54,5 +54,8 @@ export class RegisterDto {
   @ValidateNested()
   @Type(() => RegisterTenantDto)
   tenant!: RegisterTenantDto;
-}
 
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
+}

@@ -1,0 +1,484 @@
+Implement a complete enterprise-level real-time Support Center system for ONEERP fully integrated into the existing architecture. This must be implemented carefully without breaking any current functionality because everything in ONEERP is currently working correctly.
+
+IMPORTANT:
+
+* Do NOT break any existing modules, dashboards, billing logic, referral system, permissions, layouts, translations, responsiveness, routing, tenant logic, or owner app functionality.
+* Follow the exact existing ONEERP architecture, coding standards, folder structure, naming conventions, UI system, responsive design patterns, translation system, and component structure.
+* The Support Center must feel like a native professional ONEERP feature and not an external add-on.
+* Ensure scalability, maintainability, responsiveness, and production stability.
+
+==================================================
+
+1. SUPPORT CENTER OVERVIEW
+   ==================================================
+
+Create a complete “Support Center” module available inside tenant dashboard and owner app.
+
+Recommended Sidebar Label:
+
+* English: Support Center
+* Dari: مرکز پشتیبانی
+* Pashto: د ملاتړ مرکز
+
+IMPORTANT:
+
+* Add Support Center to tenant dashboard sidebar.
+* Place it after “Teams”.
+* Follow existing sidebar design and responsive behavior.
+* Use professional matching iconography.
+
+==================================================
+2. SUPPORT CENTER PURPOSE
+=========================
+
+Users should be able to:
+
+* Report issues/bugs
+* Request support/help
+* Suggest new features
+* Ask billing/account questions
+* Chat live with admin/support team
+
+This should work as:
+
+* Ticket system
+* Real-time live chat system
+* Feedback management system
+* Feature request system
+
+ALL IN ONE unified module.
+
+==================================================
+3. REAL-TIME LIVE CHAT SYSTEM
+=============================
+
+Implement real-time communication using:
+
+* Socket.IO / WebSockets
+
+IMPORTANT:
+
+* Do NOT use Firebase or external realtime services.
+* Use Socket.IO/WebSocket architecture integrated with current backend.
+
+Real-time features should include:
+
+* Instant messaging
+* Live synchronization
+* Read/unread status
+* Typing indicators
+* Real-time ticket updates
+* Live notifications
+* Online/offline state if possible
+
+The chat should behave similarly to:
+
+* Messenger
+* WhatsApp Web
+* Intercom
+* Zendesk chat systems
+
+==================================================
+4. TENANT SUPPORT CENTER FEATURES
+=================================
+
+Users should be able to create:
+
+A. Issue Reports
+Examples:
+
+* system bugs
+* printing issues
+* module errors
+* invoice problems
+
+B. Support Requests
+Examples:
+
+* activation help
+* training help
+* setup assistance
+
+C. Feature Suggestions
+Examples:
+
+* barcode support
+* WhatsApp integration
+* new reports
+
+D. Billing Questions
+Examples:
+
+* activation/payment questions
+* subscription issues
+
+==================================================
+5. TICKET CREATION FLOW
+=======================
+
+When user creates ticket:
+
+Fields:
+
+* Ticket type
+* Subject
+* Description
+* Priority
+* Attachments/screenshots/files
+
+After submission:
+
+* Ticket created instantly
+* Real-time chat thread starts automatically
+* Owner/admin receives notification immediately
+* Email notification sent automatically
+* Ticket visible in owner app instantly
+
+==================================================
+6. TICKET TYPES
+===============
+
+Implement these ticket categories:
+
+* Issue Report
+* Support Request
+* Feature Suggestion
+* Billing
+* Other
+
+==================================================
+7. TICKET STATUS SYSTEM
+=======================
+
+Statuses:
+
+* Open
+* In Progress
+* Waiting for Client
+* Resolved
+* Closed
+
+Requirements:
+
+* Status updates should sync live
+* Tenant should see status updates instantly
+* Admin should manage statuses easily
+
+==================================================
+8. CHAT/TICKET UI DESIGN
+========================
+
+Implement modern chat + ticket hybrid interface.
+
+Recommended Layout:
+
+LEFT SIDE:
+
+* Ticket/conversation list
+* Filters
+* Search
+* Unread indicators
+* Status badges
+
+RIGHT SIDE:
+
+* Live conversation/messages
+* Attachments
+* Typing indicators
+* Reply box
+
+Design should feel similar to:
+
+* WhatsApp Web
+* Messenger
+* Intercom
+
+IMPORTANT:
+
+* Fully responsive
+* Mobile optimized
+* Tablet optimized
+* Desktop optimized
+
+==================================================
+9. FILE ATTACHMENTS
+===================
+
+Allow file uploads:
+
+* images/screenshots
+* PDFs
+* videos
+* logs/documents
+
+Requirements:
+
+* Secure upload validation
+* File size validation
+* Preview support where possible
+* Attachment visibility inside chat
+
+==================================================
+10. OWNER APP SUPPORT MANAGEMENT
+================================
+
+Create complete Support Management Center inside owner/admin app.
+
+Admin should be able to:
+
+* View all tickets
+* Reply live
+* Search tickets
+* Filter tickets
+* Assign statuses
+* Mark resolved
+* View tenant details
+* View module information
+* View priority levels
+* View referral/premium partner status
+
+==================================================
+11. REAL-TIME OWNER FEATURES
+============================
+
+Admin/owner should receive:
+
+* Instant new ticket notifications
+* Instant new message notifications
+* Unread indicators
+* Real-time updates
+* Live message synchronization
+
+==================================================
+12. EMAIL NOTIFICATION SYSTEM
+=============================
+
+IMPORTANT:
+When tenant:
+
+* creates ticket
+* sends first message
+* replies to existing ticket
+
+System should automatically send email notification to owner/admin email.
+
+Email examples:
+
+* New Support Ticket
+* New Client Reply
+* New Feature Suggestion
+* New Billing Request
+
+Email should include:
+
+* tenant name
+* ticket type
+* subject
+* message preview
+* direct owner app ticket link
+
+IMPORTANT:
+
+* Maintain existing email architecture/settings
+* Do NOT break current SMTP/email system
+
+==================================================
+13. PREMIUM PARTNER INTEGRATION
+===============================
+
+Integrate with Referral/Premium Partner system.
+
+Premium Partner users should:
+
+* Show Premium Partner badge inside tickets/chats
+* Receive priority support handling
+* Appear in priority queue
+* Access beta feedback channels
+
+==================================================
+14. FEATURE REQUEST MANAGEMENT
+==============================
+
+Feature suggestion tickets should support statuses:
+
+* Under Review
+* Planned
+* In Development
+* Completed
+* Rejected
+
+Tenant should see feature request progress/status.
+
+==================================================
+15. DATABASE STRUCTURE
+======================
+
+Suggested tables:
+
+support_tickets
+
+* id
+* tenant_id
+* type
+* subject
+* status
+* priority
+* assigned_to
+* created_at
+* updated_at
+
+support_messages
+
+* id
+* ticket_id
+* sender_type
+* sender_id
+* message
+* attachment
+* seen
+* created_at
+
+support_attachments
+
+* id
+* ticket_id
+* file_name
+* file_path
+* mime_type
+* uploaded_by
+
+support_notifications
+
+* id
+* user_id
+* ticket_id
+* type
+* read_status
+
+Requirements:
+
+* Optimized PostgreSQL queries
+* Proper indexes
+* Scalable structure
+* Secure validation
+* Audit logging where applicable
+
+==================================================
+16. SEARCH & FILTER SYSTEM
+==========================
+
+Add:
+
+* Search conversations
+* Search tickets
+* Filter by:
+
+  * status
+  * type
+  * priority
+  * tenant
+  * unread
+  * Premium Partner
+
+==================================================
+17. NOTIFICATION SYSTEM
+=======================
+
+Add live notification support:
+
+* unread counts
+* new messages
+* ticket updates
+* admin replies
+* status changes
+
+Notifications should sync instantly.
+
+==================================================
+18. TRANSLATIONS (VERY IMPORTANT)
+=================================
+
+ONEERP supports:
+
+* English
+* Dari
+* Pashto
+
+IMPORTANT:
+
+* Do NOT miss ANY translation.
+* Translate ALL:
+
+  * labels
+  * buttons
+  * chat messages
+  * ticket statuses
+  * notifications
+  * alerts
+  * validation messages
+  * placeholders
+  * empty states
+  * tooltips
+  * filters
+  * search labels
+  * upload messages
+  * support categories
+  * feature request statuses
+  * admin sections
+
+Ensure:
+
+* Proper RTL support
+* Mobile RTL compatibility
+* Consistent translation quality
+
+==================================================
+19. UI/UX REQUIREMENTS
+======================
+
+* Modern SaaS-level UI
+* Clean professional design
+* Responsive layouts
+* Smooth animations/transitions
+* Professional cards/tables
+* No overlapping UI
+* No broken layouts
+* Match ONEERP design language
+* Maintain theme compatibility if existing
+
+==================================================
+20. PERFORMANCE & STABILITY
+===========================
+
+Requirements:
+
+* Efficient Socket.IO implementation
+* Proper cleanup/disconnect handling
+* Efficient database queries
+* Optimized message loading/pagination
+* No unnecessary socket events
+* Prevent memory leaks
+
+IMPORTANT:
+
+* Everything must remain performant on VPS infrastructure.
+* Architecture should support future scaling.
+
+==================================================
+21. TESTING & SAFETY
+====================
+
+Before finalizing:
+
+* Ensure all current features still work correctly
+* Ensure real-time sync works reliably
+* Ensure email notifications work correctly
+* Ensure attachment uploads work correctly
+* Ensure translations are complete
+* Ensure responsive layouts work properly
+* Ensure no console errors
+* Ensure no TypeScript errors
+* Ensure no socket connection issues
+* Ensure production build passes successfully
+
+This implementation must feel like a premium international SaaS ERP support platform fully integrated into ONEERP.

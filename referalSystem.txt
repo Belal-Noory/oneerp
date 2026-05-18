@@ -1,0 +1,550 @@
+Implement a complete enterprise-level Referral, Rewards, Bundle Discount, Premium Partner, and Manual Activation Tracking System for ONEERP. This must be implemented as a native core ONEERP feature fully integrated into the current architecture without breaking any existing functionality.
+
+IMPORTANT:
+
+* Everything in ONEERP is currently working correctly.
+* Do NOT break existing logic, workflows, module activation system, permissions, billing logic, tenant structure, translations, responsiveness, or UI components.
+* Maintain compatibility with all existing modules and future modules.
+* Follow the exact existing ONEERP coding structure, folder architecture, naming conventions, translation system, design system, responsive layouts, sidebar behavior, and UI component patterns.
+* Ensure the implementation feels professional, modern, scalable, and production-ready.
+
+==================================================
+
+1. CURRENT BUSINESS FLOW (VERY IMPORTANT)
+   ==================================================
+
+ONEERP currently DOES NOT use online payment gateways.
+
+Current workflow:
+
+1. User requests activation of a module
+2. Admin manually reviews request
+3. User pays outside the system
+4. Admin manually confirms payment
+5. Admin activates module for tenant
+6. Tenant receives module access
+
+IMPORTANT:
+
+* Keep this workflow exactly as it is.
+* Do NOT replace it with online payment processing.
+* Extend the workflow carefully with:
+
+  * referral tracking
+  * reward tracking
+  * discount calculations
+  * activation/payment confirmation statuses
+
+The system architecture should remain scalable so online payments can easily be added in future.
+
+==================================================
+2. COMPLETE REFERRAL SYSTEM
+===========================
+
+Create a complete referral/invite system.
+
+Each tenant/user should automatically receive:
+
+* Unique referral code
+* Unique referral link
+
+Examples:
+
+* ONEERP-4582
+* BELAL10
+
+Requirements:
+
+* Referral codes must be unique
+* Referral links must automatically include referral code
+* Add copy/share functionality
+* Referral code can be used during:
+
+  * registration
+  * module activation request
+  * onboarding process
+
+Referral Flow:
+
+1. Existing tenant shares referral link/code
+2. New customer registers using referral
+3. New customer requests module activation
+4. Admin manually confirms payment
+5. Admin activates module
+6. System marks referral as successful
+7. Rewards trigger automatically
+
+IMPORTANT:
+
+* Prevent self-referrals
+* Prevent fake/duplicate referrals
+* Prevent abuse
+* Add secure validation logic
+* Add referral logs/history
+
+==================================================
+3. MODULE DISCOUNT SYSTEM
+=========================
+
+Implement automatic progressive bundle discount system.
+
+Discount Rules:
+
+* 1 Active Module = 5% Discount
+* 2 Active Modules = 10% Discount
+* 3 Active Modules = 15% Discount
+* 4 Active Modules = 20% Discount
+* 5+ Active Modules = 25% MAX Discount
+
+Requirements:
+
+* Discounts calculate automatically
+* Recalculate instantly when modules are activated/deactivated
+* Apply discounts to:
+
+  * subscriptions
+  * invoices
+  * pricing cards
+  * billing summaries
+  * activation requests
+* Prevent discounts exceeding 25%
+* Show savings clearly in UI
+
+Marketing Labels:
+
+* Bundle Savings
+* Smart Business Savings
+* Loyalty Benefits
+
+IMPORTANT:
+
+* Maintain billing accuracy
+* Do not affect existing activation flow
+
+==================================================
+4. REFERRAL REWARD SYSTEM
+=========================
+
+Reward Milestones:
+
+1 Successful Referral:
+
+* 10% invoice discount
+
+3 Successful Referrals:
+
+* 1 month free subscription
+
+5 Successful Referrals:
+
+* Unlock Premium Partner status
+
+10 Successful Referrals:
+
+* Permanent additional 5% loyalty discount
+
+IMPORTANT:
+
+* Rewards trigger ONLY after:
+
+  * admin confirms payment
+  * admin activates module
+* Prevent duplicate rewards
+* Maintain reward logs/history
+
+==================================================
+5. PREMIUM PARTNER SYSTEM
+=========================
+
+When user reaches:
+
+* 5 successful referrals
+
+Automatically upgrade them to:
+
+🏅 ONEERP Premium Partner
+
+==================================================
+6. PREMIUM PARTNER BENEFITS
+===========================
+
+Premium Partner users should receive:
+
+* Priority customer support
+* Faster issue resolution
+* Premium Partner badge
+* Early access to selected features
+* Access to beta/testing features
+* Priority feedback channel
+* Ability to preview selected upcoming module improvements before public release
+
+IMPORTANT:
+
+* Stable production system must remain unaffected
+* Beta features must remain optional
+* Admin should control beta access
+
+==================================================
+7. PREMIUM PARTNER BADGE
+========================
+
+Create a professional Premium Partner badge.
+
+Requirements:
+
+* Modern premium design
+* Gold/premium styling
+* Professional iconography
+* Responsive on all screen sizes
+* Match ONEERP design system
+
+Badge Visibility:
+
+* ONLY visible to Premium Partner users
+* Show in:
+
+  * referral dashboard
+  * profile section
+  * tenant dashboard header/profile area
+  * future partner-related sections
+
+IMPORTANT:
+
+* Non-premium users must NOT see badge placeholders
+* No disabled badge visibility for normal users
+
+Badge Label:
+🏅 ONEERP Premium Partner
+
+==================================================
+8. TENANT SIDEBAR UPDATE
+========================
+
+Add new sidebar item BEFORE “Teams”.
+
+Sidebar Labels:
+
+* English: Referrals
+* Dari: معرفی کاربران
+* Pashto: د کاروونکو بلنه
+
+Requirements:
+
+* Follow existing sidebar design
+* Maintain responsive behavior
+* Maintain mobile compatibility
+* Use matching professional icons
+* Preserve existing sidebar logic
+
+==================================================
+9. REFERRAL DASHBOARD PAGE
+==========================
+
+Create complete referral dashboard page.
+
+==================================================
+A. OVERVIEW CARDS
+=================
+
+Include:
+
+* Total referrals
+* Successful referrals
+* Pending referrals
+* Current discount percentage
+* Current reward level
+* Referral earnings
+* Premium Partner status
+
+==================================================
+B. REFERRAL LINK SECTION
+========================
+
+Include:
+
+* Referral code
+* Referral link
+* Copy button
+* Share button
+
+==================================================
+C. REWARDS & BENEFITS SECTION
+=============================
+
+Explain rewards clearly in all languages.
+
+Example Table:
+
+| Referrals | Reward           | Benefits                       |
+| --------- | ---------------- | ------------------------------ |
+| 1         | 10% Discount     | Discount on next invoice       |
+| 3         | 1 Month Free     | Free subscription month        |
+| 5         | Premium Partner  | Priority support & beta access |
+| 10        | Loyalty Discount | Permanent extra 5% savings     |
+
+==================================================
+D. PROGRESS TRACKER
+===================
+
+Examples:
+
+* “You are 2 referrals away from becoming Premium Partner”
+* Milestone progress bars
+* Reward indicators
+
+==================================================
+E. PREMIUM PARTNER SECTION
+==========================
+
+Visible ONLY for Premium Partner users.
+
+Include:
+
+* Premium badge
+* Benefit cards
+* Beta access information
+* Priority support information
+* Partner feature access
+
+==================================================
+F. REFERRAL HISTORY TABLE
+=========================
+
+Include:
+
+* Referred user
+* Date
+* Status
+* Reward earned
+* Activation status
+* Payment confirmation status
+
+==================================================
+10. REFERRAL STATUS SYSTEM
+==========================
+
+Referral statuses should include:
+
+* Pending
+* Awaiting Payment Confirmation
+* Activated
+* Reward Granted
+* Rejected
+
+Users should clearly see statuses in dashboard.
+
+==================================================
+11. PRIORITY FEEDBACK SYSTEM
+============================
+
+Premium Partner users should receive dedicated feedback system.
+
+Requirements:
+
+* Dedicated feedback submission area
+* Priority feature request handling
+* Beta feedback submission
+
+IMPORTANT:
+
+* Feedback should only be visible to:
+
+  * submitting tenant/user
+  * admins
+* Other users must NOT access another tenant’s feedback
+
+Admin should clearly identify:
+
+* Premium Partner feedback
+* Beta feedback
+* Priority requests
+
+==================================================
+12. PUBLIC WEBSITE MARKETING FEATURES
+=====================================
+
+Add professional marketing sections to public website.
+
+==================================================
+A. TOP ANNOUNCEMENT BAR
+=======================
+
+Example:
+🔥 Activate multiple modules and save up to 25%
+
+==================================================
+B. PRICING SECTION
+==================
+
+Each module card should display:
+
+* Original price
+* Discounted price
+* Savings amount
+* Bundle savings labels
+
+==================================================
+C. REFERRAL PROMOTION SECTION
+=============================
+
+Title:
+Invite & Earn with ONEERP
+
+Text:
+Refer businesses and earn discounts, rewards, and free subscription benefits.
+
+Buttons:
+
+* Get Referral Link
+* Start Inviting
+
+==================================================
+13. ADMIN PANEL FEATURES
+========================
+
+Create admin management tools for:
+
+* Referral settings
+* Reward settings
+* Discount settings
+* Premium Partner management
+* Beta access management
+* Referral analytics
+* Referral logs
+* Fraud monitoring
+* Promotion management
+
+Admin should be able to:
+
+* Modify percentages
+* Enable/disable rewards
+* Manage referral rules
+* Assign/remove Premium Partner manually
+* Control beta feature visibility
+* Confirm payment manually
+* Activate referrals manually if needed
+
+==================================================
+14. ADMIN PAYMENT CONFIRMATION SYSTEM
+=====================================
+
+Add payment confirmation controls.
+
+Admin should be able to mark requests as:
+
+* Pending
+* Payment Received
+* Activated
+* Rejected
+
+Add:
+
+* Payment notes
+* Activation notes
+* Referral source information
+* Referrer details
+
+IMPORTANT:
+
+* Rewards should trigger ONLY after activation/payment confirmation.
+* Prevent duplicate reward generation.
+
+==================================================
+15. DATABASE & BACKEND
+======================
+
+Create optimized scalable backend/database structure.
+
+Suggested Tables:
+
+* referrals
+* referral_rewards
+* referral_logs
+* module_discounts
+* premium_partners
+* beta_feature_access
+* partner_feedback
+
+Requirements:
+
+* Optimized queries
+* Proper indexes
+* Secure validation
+* Audit logging
+* Prevent duplicate reward generation
+* Maintain scalability
+
+==================================================
+16. TRANSLATIONS (VERY IMPORTANT)
+=================================
+
+ONEERP supports:
+
+* English
+* Dari
+* Pashto
+
+IMPORTANT:
+
+* Do NOT miss ANY translation.
+* Translate:
+
+  * labels
+  * buttons
+  * badges
+  * notifications
+  * descriptions
+  * progress messages
+  * alerts
+  * admin sections
+  * referral statuses
+  * feedback system
+  * validation messages
+  * banners
+  * tooltips
+  * tables
+  * sidebar items
+  * reward explanations
+
+Ensure:
+
+* Proper RTL support
+* Mobile RTL compatibility
+* Consistent translation quality
+
+==================================================
+17. UI/UX REQUIREMENTS
+======================
+
+* Maintain ONEERP design system
+* Modern SaaS-level UI
+* Clean cards/tables
+* Professional animations/transitions
+* Fully responsive:
+
+  * desktop
+  * tablet
+  * mobile
+* No overlapping UI
+* No broken layouts
+* Maintain theme compatibility if existing
+
+==================================================
+18. TESTING & SAFETY
+====================
+
+Before finalizing:
+
+* Ensure all current features continue working correctly
+* Ensure activation flow remains stable
+* Ensure billing calculations remain accurate
+* Ensure referral calculations work correctly
+* Ensure Premium Partner logic works correctly
+* Ensure feedback privacy/security works correctly
+* Ensure all translations are complete
+* Ensure no console errors
+* Ensure no TypeScript errors
+* Ensure production build passes successfully
+* Ensure responsive layouts work correctly on all devices
+
+This implementation must feel like a premium international SaaS ERP feature fully integrated into ONEERP.
