@@ -14,8 +14,15 @@ function joinUrl(base: string, path: string): string {
 }
 
 function getSiteBaseUrl(): string {
-  const env = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const env =
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    process.env.SITE_URL?.trim() ||
+    process.env.PUBLIC_WEB_URL?.trim() ||
+    process.env.NEXT_PUBLIC_WEB_BASE_URL?.trim();
   if (env) return env.replace(/\/+$/, "");
+
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) return `https://${vercel.replace(/\/+$/, "")}`;
   return "http://localhost:3000";
 }
 
@@ -46,4 +53,3 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return urls;
 }
-
