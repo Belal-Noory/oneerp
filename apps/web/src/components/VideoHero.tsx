@@ -145,8 +145,8 @@ export function VideoHero(props: {
           </div>
 
           <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-black">
-            <div className="aspect-video w-full">
-              <video className="h-full w-full" controls playsInline preload="metadata" autoPlay>
+            <div className="aspect-[16/9] w-full">
+              <video className="h-full w-full object-contain" controls playsInline preload="metadata" autoPlay>
                 {fullSources.map((s) => (
                   <source key={`${s.type}:${s.src}`} src={s.src} type={s.type} />
                 ))}

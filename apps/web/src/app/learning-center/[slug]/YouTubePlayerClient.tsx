@@ -31,7 +31,7 @@ export function YouTubePlayerClient(props: { slug: string; videoId: string | nul
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-card">
-      <div className="relative aspect-video bg-black">
+      <div className="relative aspect-[16/9] bg-black">
         {!playing ? (
           <button
             type="button"
