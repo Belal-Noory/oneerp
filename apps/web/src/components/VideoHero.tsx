@@ -82,7 +82,7 @@ export function VideoHero(props: {
   const loopSources = useMemo(() => (props.loopSources ?? []).filter((x) => x.src && x.type), [props.loopSources]);
   const fullSources = useMemo(() => (props.fullSources ?? []).filter((x) => x.src && x.type), [props.fullSources]);
 
-  const showVideo = enabled && hasLoop && canAutoplay && shouldLoad;
+  const showVideo = enabled && hasLoop && canAutoplay && shouldLoad && !modalOpen;
   const mobile = isMobileViewport();
   const showPlay = enabled && hasFull;
   const playStyle = mobile || !showVideo ? "hero" : "corner";

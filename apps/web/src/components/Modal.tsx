@@ -28,7 +28,7 @@ export function Modal(props: { open: boolean; onClose: () => void; children: Rea
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/45" onClick={onClose} />
       <div className="relative mx-auto flex min-h-dvh max-w-3xl items-center px-4 py-10">
         <div className="w-full rounded-2xl border border-gray-200 bg-white shadow-card">{props.children}</div>
       </div>
