@@ -38,7 +38,7 @@ export function LanguageSwitcher(props: { locale: Locale }) {
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative z-50">
       <button
         type="button"
         className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-gray-700 transition hover:bg-gray-100 hover:text-gray-900"
@@ -56,7 +56,7 @@ export function LanguageSwitcher(props: { locale: Locale }) {
         <div
           role="menu"
           className={[
-            "absolute z-30 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg",
+            "absolute z-50 mt-2 w-44 rounded-xl border border-gray-200 bg-white p-1 shadow-lg",
             rtl ? "left-0" : "right-0"
           ].join(" ")}
         >
