@@ -83,7 +83,9 @@ export function VideoHero(props: {
   const fullSources = useMemo(() => (props.fullSources ?? []).filter((x) => x.src && x.type), [props.fullSources]);
 
   const showVideo = enabled && hasLoop && canAutoplay && shouldLoad;
-  const showPlay = enabled && hasFull && (!showVideo || isMobileViewport());
+  const mobile = isMobileViewport();
+  const showPlay = enabled && hasFull;
+  const playStyle = mobile || !showVideo ? "hero" : "corner";
 
   return (
     <div ref={hostRef} className="relative h-full w-full">
@@ -110,11 +112,16 @@ export function VideoHero(props: {
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="absolute inset-0 flex items-center justify-center"
+          className={playStyle === "hero" ? "absolute inset-0 flex items-center justify-center" : "absolute bottom-3 right-3"}
           aria-label={props.title}
         >
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-gray-900 shadow transition hover:bg-white">
-            <svg className="h-5 w-5 translate-x-[1px]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <span
+            className={[
+              "inline-flex items-center justify-center rounded-full bg-white/90 text-gray-900 shadow transition hover:bg-white",
+              playStyle === "hero" ? "h-12 w-12" : "h-10 w-10"
+            ].join(" ")}
+          >
+            <svg className={playStyle === "hero" ? "h-5 w-5 translate-x-[1px]" : "h-4 w-4 translate-x-[1px]"} viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M10 8l6 4-6 4V8Z" fill="currentColor" />
             </svg>
           </span>

@@ -4,7 +4,7 @@ import { getRequestLocale } from "@/lib/locale";
 import { getApiBaseUrl } from "@/lib/api";
 import { IconChart, IconGlobe, IconLayers, IconPuzzle, IconShield } from "@/components/Graphics";
 import { Reveal } from "@/components/Reveal";
-import { HomeHeroMedia, HomeVideoSections } from "@/components/HomeVideoExperience";
+import { HomeHeroMedia } from "@/components/HomeVideoExperience";
 
 type TutorialCard = { slug: string; title_en: string; title_dr: string; title_ps: string; thumbnail_url: string | null; difficulty: string; language: string; views: number };
 
@@ -75,8 +75,6 @@ export default async function HomePage() {
           </div>
         </section>
       </Reveal>
-
-      <HomeVideoSections />
 
       <section className="space-y-6">
         <Reveal>
